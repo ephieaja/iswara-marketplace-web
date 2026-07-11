@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ibb.co</domain>
+        <domain includeSubdomains="true">i.ibb.co</domain>
+    </domain-config>
+    <!-- Imgur domains -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">imgur.com</domain>
+        <domain includeSubdomains="true">i.imgur.com</domain>
+    </domain-config>
+</network-security-config>

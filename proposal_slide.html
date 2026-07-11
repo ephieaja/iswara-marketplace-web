@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketplace Aisyiyah Jawa Timur - Proposal Presentasi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #333;
+            overflow: hidden;
+        }
+
+        .slide-container {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            padding: 60px 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Navigation */
+        .nav-controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 30px;
+            right: 40px;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        /* Slide 1 - Title */
+        .slide-title {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+        }
+
+        .slide-title::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0,180,100,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .logo-container {
+            margin-bottom: 40px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .logo-container img {
+            width: 180px;
+            height: 180px;
+            border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .title-main {
+            font-size: 56px;
+            font-weight: 800;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .title-sub {
+            font-size: 24px;
+            color: #a0a0a0;
+            margin-bottom: 30px;
+        }
+
+        .tagline-box {
+            background: rgba(255,255,255,0.1);
+            padding: 20px 40px;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            margin-top: 20px;
+        }
+
+        .tagline {
+            font-size: 20px;
+            color: #f39c12;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .presenter-info {
+            position: absolute;
+            bottom: 100px;
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+        }
+
+        /* Common Slide Styles */
+        .slide-header {
+            margin-bottom: 40px;
+        }
+
+        .slide-number {
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+
+        .slide-heading {
+            font-size: 42px;
+            color: #1a1a2e;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .slide-heading.light {
+            color: white;
+        }
+
+        /* Slide 2 - About */
+        .slide-about {
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .about-text {
+            font-size: 18px;
+            line-height: 1.8;
+            color: #555;
+        }
+
+        .about-text p {
+            margin-bottom: 20px;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #00b464 0%, #00d4aa 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0,180,100,0.3);
+        }
+
+        .highlight-box h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .highlight-box ul {
+            list-style: none;
+        }
+
+        .highlight-box li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            font-size: 16px;
+        }
+
+        .highlight-box li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #f39c12;
+            font-weight: bold;
+        }
+
+        /* Slide 3 - Problem */
+        .slide-problem {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+
+        .problem-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .problem-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .problem-item {
+            background: rgba(255,255,255,0.15);
+            padding: 25px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .problem-item h4 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .problem-item p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .problem-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+
+        .solution-box {
+            background: rgba(255,255,255,0.95);
+            padding: 40px;
+            border-radius: 20px;
+            color: #333;
+        }
+
+        .solution-box h3 {
+            font-size: 28px;
+            color: #1a1a2e;
+            margin-bottom: 20px;
+        }
+
+        .solution-box .big-check {
+            font-size: 60px;
+            color: #00b464;
+            margin-bottom: 20px;
+        }
+
+        /* Slide 4 - Solution */
+        .slide-solution {
+            background: linear-gradient(135deg, #00b464 0%, #00d4aa 100%);
+        }
+
+        .solution-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .solution-card {
+            background: rgba(255,255,255,0.95);
+            padding: 35px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+
+        .solution-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .solution-card .icon {
+            font-size: 50px;
+            margin-bottom: 20px;
+        }
+
+        .solution-card h4 {
+            font-size: 20px;
+            color: #1a1a2e;
+            margin-bottom: 10px;
+        }
+
+        .solution-card p {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* Slide 5 - Features */
+        .slide-features {
+            background: linear-gradient(180deg, #ffffff 0%, #f0f4f8 100%);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+            flex: 1;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+            border: 1px solid #eee;
+            text-align: center;
+        }
+
+        .feature-card .f-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            font-size: 28px;
+        }
+
+        .feature-card h5 {
+            font-size: 16px;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+
+        .feature-card p {
+            font-size: 12px;
+            color: #888;
+        }
+
+        /* Slide 6 - Tech Stack */
+        .slide-tech {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            flex: 1;
+        }
+
+        .tech-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .tech-card .tech-icon {
+            font-size: 50px;
+            margin-bottom: 20px;
+        }
+
+        .tech-card h4 {
+            color: white;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .tech-card p {
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+        }
+
+        .tech-badge {
+            display: inline-block;
+            background: rgba(0,180,100,0.2);
+            color: #00d4aa;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-top: 15px;
+        }
+
+        /* Slide 7 - App Preview */
+        .slide-preview {
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .preview-content {
+            display: flex;
+            gap: 40px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .phone-mockup {
+            width: 280px;
+            height: 560px;
+            background: #1a1a2e;
+            border-radius: 40px;
+            padding: 10px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .phone-mockup::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 25px;
+            background: #1a1a2e;
+            border-radius: 20px;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border-radius: 30px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .phone-header {
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            padding: 40px 15px 15px;
+            color: white;
+            text-align: center;
+        }
+
+        .phone-header small {
+            font-size: 10px;
+            opacity: 0.8;
+        }
+
+        .phone-header h3 {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .phone-body {
+            flex: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .phone-card {
+            background: #f5f5f5;
+            border-radius: 10px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            gap: 10px;
+        }
+
+        .phone-card-img {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            border-radius: 8px;
+        }
+
+        .phone-card-text {
+            flex: 1;
+        }
+
+        .phone-card-text div {
+            height: 8px;
+            background: #ddd;
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
+
+        .phone-card-text div:first-child {
+            width: 80%;
+        }
+
+        .phone-card-text div:last-child {
+            width: 50%;
+            background: #00b464;
+        }
+
+        .preview-features {
+            flex: 1;
+        }
+
+        .preview-feature {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        .preview-feature .check {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+        }
+
+        .preview-feature h4 {
+            font-size: 18px;
+            color: #1a1a2e;
+            margin-bottom: 5px;
+        }
+
+        .preview-feature p {
+            font-size: 14px;
+            color: #888;
+        }
+
+        /* Slide 8 - Benefits */
+        .slide-benefits {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            flex: 1;
+        }
+
+        .benefit-card {
+            background: rgba(255,255,255,0.95);
+            padding: 35px;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .benefit-card .b-icon {
+            font-size: 50px;
+            margin-bottom: 20px;
+        }
+
+        .benefit-card h4 {
+            font-size: 22px;
+            color: #1a1a2e;
+            margin-bottom: 15px;
+        }
+
+        .benefit-card p {
+            font-size: 15px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .benefit-card .stat {
+            font-size: 36px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        /* Slide 9 - Roadmap */
+        .slide-roadmap {
+            background: linear-gradient(180deg, #ffffff 0%, #f0f4f8 100%);
+        }
+
+        .roadmap-timeline {
+            display: flex;
+            justify-content: space-between;
+            flex: 1;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .roadmap-item {
+            text-align: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .roadmap-item::after {
+            content: '';
+            position: absolute;
+            top: 40px;
+            right: -50%;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #00b464, #00d4aa);
+        }
+
+        .roadmap-item:last-child::after {
+            display: none;
+        }
+
+        .roadmap-circle {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 32px;
+            box-shadow: 0 10px 30px rgba(0,180,100,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .roadmap-item.done .roadmap-circle {
+            background: #00b464;
+        }
+
+        .roadmap-item.current .roadmap-circle {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 10px 30px rgba(0,180,100,0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0,180,100,0.5); }
+        }
+
+        .roadmap-item h4 {
+            font-size: 18px;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+
+        .roadmap-item p {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .roadmap-item .time {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        .roadmap-item.done .time {
+            background: #00b464;
+            color: white;
+        }
+
+        /* Slide 10 - Investment */
+        .slide-investment {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .investment-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .investment-table {
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .inv-header {
+            background: rgba(0,180,100,0.2);
+            padding: 20px;
+            color: #00d4aa;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .inv-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: white;
+        }
+
+        .inv-row:last-child {
+            border-bottom: none;
+        }
+
+        .inv-row.total {
+            background: linear-gradient(135deg, #00b464, #00d4aa);
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .inv-row .cost {
+            color: #00d4aa;
+        }
+
+        .inv-row.total .cost {
+            color: white;
+        }
+
+        .inv-note {
+            background: rgba(255,255,255,0.05);
+            padding: 30px;
+            border-radius: 20px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .inv-note h4 {
+            color: #00d4aa;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        .inv-note ul {
+            list-style: none;
+        }
+
+        .inv-note li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .inv-note li::before {
+            content: '★';
+            position: absolute;
+            left: 0;
+            color: #f39c12;
+        }
+
+        /* Slide 11 - CTA */
+        .slide-cta {
+            background: linear-gradient(135deg, #00b464 0%, #00d4aa 100%);
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+        }
+
+        .cta-content h2 {
+            font-size: 52px;
+            margin-bottom: 20px;
+        }
+
+        .cta-content p {
+            font-size: 22px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .cta-btn {
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s;
+            border: none;
+        }
+
+        .cta-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .cta-btn.primary {
+            background: white;
+            color: #00b464;
+        }
+
+        .cta-btn.secondary {
+            background: transparent;
+            border: 2px solid white;
+            color: white;
+        }
+
+        .cta-contact {
+            margin-top: 50px;
+            opacity: 0.9;
+        }
+
+        .cta-contact p {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <!-- Slide 1: Title -->
+        <div class="slide slide-title active" id="slide-1">
+            <div class="logo-container">
+                <img src="assets/images/logo_marketplace.png" alt="Marketplace Logo" onerror="this.style.display='none'">
+            </div>
+            <h1 class="title-main">MARKETPLACE AISYIYAH JAWA TIMUR</h1>
+            <p class="title-sub">Keluarga Muhammadiyah se-Jawa Timur</p>
+            <div class="tagline-box">
+                <p class="tagline">"Tangguh Berdaya Berkemajuan"</p>
+            </div>
+            <div class="presenter-info">
+                Proposal Pengembangan Platform Digital
+            </div>
+        </div>
+
+        <!-- Slide 2: About -->
+        <div class="slide slide-about" id="slide-2">
+            <div class="slide-header">
+                <span class="slide-number">01</span>
+                <h2 class="slide-heading">Tentang Marketplace Aisyiyah</h2>
+            </div>
+            <div class="about-grid">
+                <div class="about-text">
+                    <p><strong>Marketplace Aisyiyah Jawa Timur</strong> adalah platform digital untuk <strong>Keluarga Muhammadiyah</strong> se-Jawa Timur dalam menjual dan mempromosikan produk mereka secara online.</p>
+                    <p>Berdiri sebagai wadah untuk <strong>menghimpun dan memberdayakan</strong> para wirausahawan Muslim di Jawa Timur dalam mengembangkan usahanya secara profesional dan beretika.</p>
+                    <p>Marketplace ini bertujuan untuk <strong>memperluas jangkauan pasar</strong> produk-produk Keluarga Muhammadiyah secara digital.</p>
+                </div>
+                <div class="highlight-box">
+                    <h3>Visi Marketplace</h3>
+                    <ul>
+                        <li>Menghimpun produk Keluarga Muhammadiyah</li>
+                        <li>Memperluas pasar secara digital</li>
+                        <li>Meningkatkan ekonomi umat</li>
+                        <li>Memajukan UMKM Islam di Jawa Timur</li>
+                        <li>Membangun ekosistem entrepreneur Muslim</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Problem -->
+        <div class="slide slide-problem" id="slide-3">
+            <div class="slide-header">
+                <span class="slide-number">02</span>
+                <h2 class="slide-heading light">Tantangan yang Dihadapi</h2>
+            </div>
+            <div class="problem-content">
+                <div class="problem-list">
+                    <div class="problem-item">
+                        <div class="problem-icon">🏪</div>
+                        <h4>Pasar Terbatas</h4>
+                        <p>Produk hanya dikenal di lingkup lokal/daerah saja</p>
+                    </div>
+                    <div class="problem-item">
+                        <div class="problem-icon">📱</div>
+                        <h4>Belum Ada Platform Digital</h4>
+                        <p>Tidak memiliki marketplace resmi untuk berjualan online</p>
+                    </div>
+                    <div class="problem-item">
+                        <div class="problem-icon">💰</div>
+                        <h4>Biaya Penjualan Tinggi</h4>
+                        <p>Menjual via marketplace umum dikenakan biaya tinggi</p>
+                    </div>
+                </div>
+                <div class="solution-box">
+                    <div class="big-check">💡</div>
+                    <h3>Solusi: Marketplace Aisyiyah</h3>
+                    <p>Platform digital eksklusif untuk memperluas jangkauan pasar produk Keluarga Muhammadiyah dengan biaya minimal dan pengelolaan mudah.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Solution -->
+        <div class="slide slide-solution" id="slide-4">
+            <div class="slide-header">
+                <span class="slide-number">03</span>
+                <h2 class="slide-heading light">Solusi Marketplace</h2>
+            </div>
+            <div class="solution-grid">
+                <div class="solution-card">
+                    <div class="icon">🌐</div>
+                    <h4>Jangkauan Luas</h4>
+                    <p>Produk bisa dijangkau seluruh Indonesia</p>
+                </div>
+                <div class="solution-card">
+                    <div class="icon">💳</div>
+                    <h4>Pembayaran Mudah</h4>
+                    <p>QRIS & transfer bank</p>
+                </div>
+                <div class="solution-card">
+                    <div class="icon">🚚</div>
+                    <h4>Pengiriman Terintegrasi</h4>
+                    <p>COD & berbagai ekspedisi</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Features -->
+        <div class="slide slide-features" id="slide-5">
+            <div class="slide-header">
+                <span class="slide-number">04</span>
+                <h2 class="slide-heading">Fitur Aplikasi</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="f-icon">👤</div>
+                    <h5>Registrasi Seller</h5>
+                    <p>Daftar mudah dengan verifikasi otomatis</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">📦</div>
+                    <h5>Katalog Produk</h5>
+                    <p>Browse & cari produk dengan filter</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">🛒</div>
+                    <h5>Keranjang Belanja</h5>
+                    <p>Multi-seller dalam satu checkout</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">💳</div>
+                    <h5>Pembayaran QRIS</h5>
+                    <p>Pembayaran cepat & aman</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">🚚</div>
+                    <h5>Tracking Pengiriman</h5>
+                    <p>Lacak pesanan real-time</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">📤</div>
+                    <h5>Share ke WA</h5>
+                    <p>Bagikan produk ke WhatsApp</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">📊</div>
+                    <h5>Dashboard Seller</h5>
+                    <p>Kelola produk & pesanan</p>
+                </div>
+                <div class="feature-card">
+                    <div class="f-icon">📱</div>
+                    <h5>Responsive</h5>
+                    <p>Bisa dibuka di HP & komputer</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Tech Stack -->
+        <div class="slide slide-tech" id="slide-6">
+            <div class="slide-header">
+                <span class="slide-number">05</span>
+                <h2 class="slide-heading light">Teknologi yang Digunakan</h2>
+            </div>
+            <div class="tech-grid">
+                <div class="tech-card">
+                    <div class="tech-icon">🎯</div>
+                    <h4>Flutter Web</h4>
+                    <p>Cross-platform framework dari Google untuk web & mobile</p>
+                    <span class="tech-badge">Open Source</span>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon">🔥</div>
+                    <h4>Firebase</h4>
+                    <p>Backend-as-a-Service: Auth, Database, Storage, Hosting</p>
+                    <span class="tech-badge">Google Cloud</span>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon">💾</div>
+                    <h4>Firestore</h4>
+                    <p>NoSQL database real-time untuk menyimpan data</p>
+                    <span class="tech-badge">Scalable</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Preview -->
+        <div class="slide slide-preview" id="slide-7">
+            <div class="slide-header">
+                <span class="slide-number">06</span>
+                <h2 class="slide-heading">Tampilan Aplikasi</h2>
+            </div>
+            <div class="preview-content">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <div class="phone-header">
+                            <small>MARKETPLACE AISYIYAH JATIM</small>
+                            <h3>Tangguh Berdaya Berkemajuan</h3>
+                        </div>
+                        <div class="phone-body">
+                            <div class="phone-card">
+                                <div class="phone-card-img"></div>
+                                <div class="phone-card-text">
+                                    <div></div>
+                                    <div></div>
+                                </div>
+                            </div>
+                            <div class="phone-card">
+                                <div class="phone-card-img"></div>
+                                <div class="phone-card-text">
+                                    <div></div>
+                                    <div></div>
+                                </div>
+                            </div>
+                            <div class="phone-card">
+                                <div class="phone-card-img"></div>
+                                <div class="phone-card-text">
+                                    <div></div>
+                                    <div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="preview-features">
+                    <div class="preview-feature">
+                        <div class="check">✓</div>
+                        <div>
+                            <h4>Antarmuka Modern & Mudah</h4>
+                            <p>Desain bersih dan intuitif untuk pengalaman terbaik</p>
+                        </div>
+                    </div>
+                    <div class="preview-feature">
+                        <div class="check">✓</div>
+                        <div>
+                            <h4>Multi-Device Support</h4>
+                            <p>Bisa diakses dari smartphone, tablet, dan komputer</p>
+                        </div>
+                    </div>
+                    <div class="preview-feature">
+                        <div class="check">✓</div>
+                        <div>
+                            <h4>Loading Cepat</h4>
+                            <p>Optimasi performa untuk koneksi internet apapun</p>
+                        </div>
+                    </div>
+                    <div class="preview-feature">
+                        <div class="check">✓</div>
+                        <div>
+                            <h4>Bahasa Indonesia</h4>
+                            <p>Seluruh antarmuka dalam Bahasa Indonesia</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Benefits -->
+        <div class="slide slide-benefits" id="slide-8">
+            <div class="slide-header">
+                <span class="slide-number">07</span>
+                <h2 class="slide-heading light">Keuntungan untuk Keluarga Muhammadiyah</h2>
+            </div>
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <div class="stat">1000+</div>
+                    <h4>Target Member</h4>
+                    <p>Jangkauan ke seluruh Keluarga Muhammadiyah Jawa Timur</p>
+                </div>
+                <div class="benefit-card">
+                    <div class="stat">24/7</div>
+                    <h4>Toko Online</h4>
+                    <p>Berjualan tanpa batas waktu dan tempat</p>
+                </div>
+                <div class="benefit-card">
+                    <div class="stat">0%</div>
+                    <h4>Biaya Admin</h4>
+                    <p>Platform internal, bebas biaya marketplace umum</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Roadmap -->
+        <div class="slide slide-roadmap" id="slide-9">
+            <div class="slide-header">
+                <span class="slide-number">08</span>
+                <h2 class="slide-heading">Timeline Pengembangan</h2>
+            </div>
+            <div class="roadmap-timeline">
+                <div class="roadmap-item done">
+                    <div class="roadmap-circle">✓</div>
+                    <h4>MVP Ready</h4>
+                    <p>Fitur dasar marketplace</p>
+                    <span class="time">Selesai</span>
+                </div>
+                <div class="roadmap-item current">
+                    <div class="roadmap-circle">2</div>
+                    <h4>Payment Gateway</h4>
+                    <p>Integrasi QRIS & transfer</p>
+                    <span class="time">2-3 Minggu</span>
+                </div>
+                <div class="roadmap-item">
+                    <div class="roadmap-circle">3</div>
+                    <h4>Shipping API</h4>
+                    <p>Ongkir otomatis</p>
+                    <span class="time">2-3 Minggu</span>
+                </div>
+                <div class="roadmap-item">
+                    <div class="roadmap-circle">4</div>
+                    <h4>Admin Dashboard</h4>
+                    <p>Manajemen lengkap</p>
+                    <span class="time">2-3 Minggu</span>
+                </div>
+                <div class="roadmap-item">
+                    <div class="roadmap-circle">5</div>
+                    <h4>Production</h4>
+                    <p>Launch & monitoring</p>
+                    <span class="time">1-2 Minggu</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Investment -->
+        <div class="slide slide-investment" id="slide-10">
+            <div class="slide-header">
+                <span class="slide-number">09</span>
+                <h2 class="slide-heading light">Estimasi Investasi</h2>
+            </div>
+            <div class="investment-content">
+                <div class="investment-table">
+                    <div class="inv-header">💰 Estimasi Biaya Bulanan</div>
+                    <div class="inv-row">
+                        <span>Firebase Hosting</span>
+                        <span class="cost">Rp 0</span>
+                    </div>
+                    <div class="inv-row">
+                        <span>Firebase Auth & Firestore</span>
+                        <span class="cost">Rp 0 - 500rb</span>
+                    </div>
+                    <div class="inv-row">
+                        <span>Domain (.web.app)</span>
+                        <span class="cost">Rp 0</span>
+                    </div>
+                    <div class="inv-row">
+                        <span>Payment Gateway Fee</span>
+                        <span class="cost">2.5-3% per tx</span>
+                    </div>
+                    <div class="inv-row">
+                        <span>SSL Certificate</span>
+                        <span class="cost">Rp 0</span>
+                    </div>
+                    <div class="inv-row total">
+                        <span>Total (Free Tier)</span>
+                        <span class="cost">Rp 0</span>
+                    </div>
+                </div>
+                <div class="inv-note">
+                    <h4>Yang Sudah Siap:</h4>
+                    <ul>
+                        <li>Platform MVP sudah berfungsi</li>
+                        <li>Deploy sudah online</li>
+                        <li>Registrasi & auth siap</li>
+                        <li>Dashboard seller siap</li>
+                        <li>Fitur share ke WhatsApp</li>
+                    </ul>
+                    <h4 style="margin-top: 20px;">Yang Perlu Ditambahkan:</h4>
+                    <ul>
+                        <li>Integrasi payment gateway</li>
+                        <li>Integrasi shipping API</li>
+                        <li>Admin dashboard lengkap</li>
+                        <li>Email notification system</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: CTA -->
+        <div class="slide slide-cta" id="slide-11">
+            <div class="cta-content">
+                <h2>Mari Wujudkan Bersama</h2>
+                <p>Dukung pertumbuhan ekonomi umat melalui Marketplace Aisyiyah Jawa Timur</p>
+                <div class="cta-buttons">
+                    <button class="cta-btn primary">✅ Setujui Pengembangan</button>
+                    <button class="cta-btn secondary">📋 Diskusikan Detail</button>
+                </div>
+                <div class="cta-contact">
+                    <p>📧 Hubungi kami untuk informasi lebih lanjut</p>
+                    <p>🌐 iswara-jawa-timur-5f32c.web.app</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-controls">
+        <button class="nav-btn" onclick="prevSlide()">◀ Sebelumnya</button>
+        <button class="nav-btn" onclick="nextSlide()">Selanjutnya ▶</button>
+    </div>
+    <div class="slide-counter">
+        <span id="current-slide">1</span> / <span id="total-slides">11</span>
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 11;
+
+        function showSlide(n) {
+            if (n < 1) n = 1;
+            if (n > totalSlides) n = totalSlides;
+
+            document.querySelectorAll('.slide').forEach(slide => {
+                slide.classList.remove('active');
+            });
+
+            document.getElementById(`slide-${n}`).classList.add('active');
+            document.getElementById('current-slide').textContent = n;
+            currentSlide = n;
+        }
+
+        function nextSlide() {
+            showSlide(currentSlide + 1);
+        }
+
+        function prevSlide() {
+            showSlide(currentSlide - 1);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Touch/swipe support
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        });
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            const diff = touchStartX - touchEndX;
+
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0) {
+                    nextSlide();
+                } else {
+                    prevSlide();
+                }
+            }
+        }
+    </script>
+</body>
+</html>

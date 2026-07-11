@@ -1,0 +1,24 @@
+# render.yaml - PocketBase Deployment Blueprint untuk Render.com
+# Gunakan ini untuk deploy dengan Docker
+
+services:
+  - type: web
+    name: iswara-pocketbase-marketplace
+    env: docker
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    port: 8091
+    healthCheckPath: /api/health
+    envVars:
+      - key: TZ
+        value: Asia/Jakarta
+      - key: PB_SKIP_MIGRATIONS
+        value: false
+    disk:
+      name: pb_data
+      mountPath: /app/pb_data
+      sizeGb: 1
+
+# healthCheckPath membutuhkan endpoint khusus
+# PocketBase tidak punya /api/health secara default
+# Jadi kita gunakan cara lain - disable health check atau gunakan /

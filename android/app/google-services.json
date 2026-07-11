@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "866742770981",
+    "project_id": "iswara-jawa-timur-5f32c",
+    "storage_bucket": "iswara-jawa-timur-5f32c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:866742770981:android:2a8f795f527d830b9c8ecc",
+        "android_client_info": {
+          "package_name": "com.iswara.iswara_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYdHTSdoN69aYyRGjFjlfHdvie5km3ufg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

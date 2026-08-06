@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../config/theme.dart';
 import '../../services/pocketbase_service.dart';
+import '../../utils/ownership_helper.dart';
 import 'welcome_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'admin_approval_screen.dart';
+import 'aktivitas_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String username;
@@ -16,6 +19,10 @@ class ProfileScreen extends StatefulWidget {
   final String jabatan;
   final String? sebagai;
   final String alamat;
+  final String? instagram;
+  final String? facebook;
+  final String? tiktok;
+  final String? website;
 
   const ProfileScreen({
     super.key,
@@ -29,6 +36,10 @@ class ProfileScreen extends StatefulWidget {
     required this.jabatan,
     this.sebagai,
     required this.alamat,
+    this.instagram,
+    this.facebook,
+    this.tiktok,
+    this.website,
   });
 
   @override
@@ -38,8 +49,15 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _namaTokoController = TextEditingController();
+  final _noWaController = TextEditingController();
+  final _alamatController = TextEditingController();
+  final _majlisController = TextEditingController();
   final _passwordController = TextEditingController();
   final _konfirmasiPasswordController = TextEditingController();
+  final _instagramController = TextEditingController();
+  final _facebookController = TextEditingController();
+  final _tiktokController = TextEditingController();
+  final _websiteController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureKonfirmasi = true;
   bool _isEditing = false;
@@ -49,39 +67,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _namaTokoController.text = widget.namaToko;
+    _noWaController.text = widget.noWa;
+    _alamatController.text = widget.alamat;
+    _majlisController.text = widget.jabatan; // widget.jabatan = majlis
+    _instagramController.text = widget.instagram ?? '';
+    _facebookController.text = widget.facebook ?? '';
+    _tiktokController.text = widget.tiktok ?? '';
+    _websiteController.text = widget.website ?? '';
   }
 
   @override
   void dispose() {
     _namaTokoController.dispose();
+    _noWaController.dispose();
+    _alamatController.dispose();
+    _majlisController.dispose();
     _passwordController.dispose();
     _konfirmasiPasswordController.dispose();
+    _instagramController.dispose();
+    _facebookController.dispose();
+    _tiktokController.dispose();
+    _websiteController.dispose();
     super.dispose();
   }
 
   Future<void> _simpan() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final pb = PocketBaseService.instance;
+    final userData = pb.authStore.record?.data;
+    final currentCount = (userData?['ganti_nama_toko_count'] as num?)?.toInt() ?? 0;
+    final newNamaToko = _namaTokoController.text.trim();
+    final oldNamaToko = widget.namaToko;
+
+    // Cek batas edit nama toko
+    if (newNamaToko != oldNamaToko && currentCount >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Batas perubahan nama toko sudah habis (maksimal 3x)'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Jika nama toko berubah, cek apakah sudah ada yang pakai
+    if (newNamaToko != oldNamaToko) {
+      final checkResult = await pb.collection('users').getList(
+        filter: 'namatoko = "$newNamaToko"',
+        perPage: 1,
+      );
+
+      if (checkResult.items.isNotEmpty && checkResult.items.first.id != widget.userId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nama toko sudah digunakan! Pilih nama lain.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      final pb = PocketBaseService.instance;
+      // Update semua field yang bisa diedit
+      final updateBody = <String, dynamic>{
+        'namatoko': newNamaToko,
+        'nowa': _noWaController.text.trim(),
+        'alamat': _alamatController.text.trim(),
+        'majlis': _majlisController.text.trim(),
+        'instagram': _instagramController.text.trim(),
+        'facebook': _facebookController.text.trim(),
+        'tiktok': _tiktokController.text.trim(),
+        'website': _websiteController.text.trim(),
+      };
 
-      // Update nama toko di PocketBase
+      // Increment counter jika nama toko berubah
+      if (newNamaToko != oldNamaToko) {
+        updateBody['ganti_nama_toko_count'] = currentCount + 1;
+      }
+
       await pb.collection('users').update(
         widget.userId,
-        body: {
-          'namaToko': _namaTokoController.text.trim(),
-        },
+        body: updateBody,
       );
 
       if (!mounted) return;
 
       setState(() => _isLoading = false);
 
+      final message = newNamaToko != oldNamaToko
+          ? 'Profil berhasil diperbarui! (${currentCount + 1}/3)'
+          : 'Profil berhasil diperbarui!';
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profil berhasil diperbarui!'),
+        SnackBar(
+          content: Text(message),
           backgroundColor: AppTheme.successColor,
         ),
       );
@@ -263,6 +346,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+
   Widget _buildDataAnggotaSection() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -309,12 +393,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _buildInfoRow('Jabatan', widget.jabatan, Icons.work),
           if (widget.sebagai != null && widget.sebagai!.isNotEmpty)
             _buildInfoRow('Sebagai', widget.sebagai!, Icons.badge),
+          // Social Media Section
+          if ((widget.instagram != null && widget.instagram!.isNotEmpty) ||
+              (widget.facebook != null && widget.facebook!.isNotEmpty) ||
+              (widget.tiktok != null && widget.tiktok!.isNotEmpty) ||
+              (widget.website != null && widget.website!.isNotEmpty)) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            const Text(
+              'Media Sosial',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (widget.instagram != null && widget.instagram!.isNotEmpty)
+              _buildInfoRow('Instagram', '@${widget.instagram}', Icons.camera_alt),
+            if (widget.facebook != null && widget.facebook!.isNotEmpty)
+              _buildInfoRow('Facebook', widget.facebook!, Icons.facebook),
+            if (widget.tiktok != null && widget.tiktok!.isNotEmpty)
+              _buildInfoRow('TikTok', '@${widget.tiktok}', Icons.music_note),
+            if (widget.website != null && widget.website!.isNotEmpty)
+              _buildInfoRow('Website', widget.website!, Icons.language),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildTokoSection() {
+    final pb = PocketBaseService.instance;
+    final userData = pb.authStore.record?.data;
+    final editCount = (userData?['ganti_nama_toko_count'] as num?)?.toInt() ?? 0;
+    final remaining = 3 - editCount;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -341,28 +456,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const Divider(height: 24),
 
-          // Username (readonly)
+          // Email (readonly)
           _buildReadOnlyField(
-            label: 'Username',
-            value: widget.username,
-            icon: Icons.alternate_email,
+            label: 'Email',
+            value: userData?['email'] ?? '-',
+            icon: Icons.email_outlined,
           ),
           const SizedBox(height: 12),
 
-          // Nama Toko (editable)
+          // Nama Toko (editable) dengan info sisa edit
+          Row(
+            children: [
+              Expanded(
+                child: _buildEditableField(
+                  label: 'Nama Toko',
+                  controller: _namaTokoController,
+                  icon: Icons.store,
+                  enabled: _isEditing,
+                ),
+              ),
+              if (_isEditing) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: remaining > 0
+                        ? AppTheme.infoColor.withOpacity(0.1)
+                        : Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$remaining x',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: remaining > 0 ? AppTheme.infoColor : Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (_isEditing && remaining <= 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                remaining > 0
+                    ? 'Sisa $remaining kali perubahan'
+                    : 'Batas perubahan sudah habis',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: remaining > 0 ? Colors.orange : Colors.red,
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+
+          // No. WhatsApp (editable)
           _buildEditableField(
-            label: 'Nama Toko',
-            controller: _namaTokoController,
-            icon: Icons.store,
+            label: 'No. WhatsApp',
+            controller: _noWaController,
+            icon: Icons.phone,
             enabled: _isEditing,
           ),
           const SizedBox(height: 12),
 
-          // No. WA
-          _buildReadOnlyField(
-            label: 'No. WhatsApp',
-            value: widget.noWa,
-            icon: Icons.phone,
+          // Alamat (editable)
+          _buildEditableField(
+            label: 'Alamat',
+            controller: _alamatController,
+            icon: Icons.location_on,
+            enabled: _isEditing,
+          ),
+          const SizedBox(height: 12),
+
+          // Majlis (editable)
+          _buildEditableField(
+            label: 'Majlis',
+            controller: _majlisController,
+            icon: Icons.work,
+            enabled: _isEditing,
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          const Text(
+            'Media Sosial',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Instagram (editable) - Opsional
+          _buildEditableField(
+            label: 'Instagram',
+            controller: _instagramController,
+            icon: Icons.camera_alt,
+            enabled: _isEditing,
+            required: false,
+          ),
+          const SizedBox(height: 12),
+
+          // Facebook (editable) - Opsional
+          _buildEditableField(
+            label: 'Facebook',
+            controller: _facebookController,
+            icon: Icons.facebook,
+            enabled: _isEditing,
+            required: false,
+          ),
+          const SizedBox(height: 12),
+
+          // TikTok (editable) - Opsional
+          _buildEditableField(
+            label: 'TikTok',
+            controller: _tiktokController,
+            icon: Icons.music_note,
+            enabled: _isEditing,
+            required: false,
+          ),
+          const SizedBox(height: 12),
+
+          // Website (editable) - Opsional
+          _buildEditableField(
+            label: 'Website',
+            controller: _websiteController,
+            icon: Icons.language,
+            enabled: _isEditing,
+            required: false,
           ),
         ],
       ),
@@ -494,15 +718,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildMenuItems() {
-    // Cek apakah user adalah pimpinan (bisa lihat admin dashboard)
-    final isPimpinan = widget.jabatan == 'Pimpinan Wilayah' ||
+    // Cek apakah user punya role admin di marketplace.
+    // Pakai 2 lapis: is_super_admin (highest) ATAU role != 'member'.
+    // Field 'role' dan 'is_super_admin' adalah schema marketplace (Tahap 2).
+    // Untuk sekarang (Tahap A), fallback cek jabatan lama.
+    final pb = PocketBaseService.instance;
+    final currentUser = pb.authStore.record;
+    final userIsSuperAdmin = isSuperAdmin(currentUser);
+    final userRole = currentUser?.data['role']?.toString();
+    final isAdmin = userIsSuperAdmin ||
+        (userRole != null && userRole != 'member' && userRole.isNotEmpty) ||
+        // Fallback sementara sampai field role diset di Tahap 2:
+        widget.jabatan == 'Pimpinan Wilayah' ||
+        widget.jabatan == 'Pimpinan Daerah' ||
+        widget.jabatan == 'Pimpinan Cabang';
+
+    // Cek apakah user boleh approve seller (super_admin, admin_wilayah, admin_pendaftaran).
+    final isApprover = userIsSuperAdmin ||
+        userRole == 'admin_wilayah' ||
+        userRole == 'admin_pendaftaran' ||
+        widget.jabatan == 'Pimpinan Wilayah' ||
         widget.jabatan == 'Pimpinan Daerah' ||
         widget.jabatan == 'Pimpinan Cabang';
 
     return Column(
       children: [
-        // Menu Admin Dashboard (hanya untuk pimpinan)
-        if (isPimpinan)
+        // Menu Admin Dashboard (hanya untuk admin)
+        // Tidak tampak di welcome screen, hanya untuk user dengan role admin.
+        // Mirip iswara_app: admin menu ada di profile, hidden untuk user biasa.
+        if (isAdmin) ...[
           _buildMenuItem(
             icon: Icons.admin_panel_settings,
             title: 'Dashboard Admin',
@@ -519,6 +763,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     sebagai: widget.sebagai,
                   ),
                 ),
+              );
+            },
+          ),
+          // Menu Verifikasi Seller (sub-menu admin)
+          if (isApprover)
+            _buildMenuItem(
+              icon: Icons.verified_user,
+              title: 'Verifikasi Seller',
+              color: AppTheme.successColor,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AdminApprovalScreen(
+                      userId: widget.userId,
+                      namaLengkap: widget.namaLengkap,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+        _buildMenuItem(
+            icon: Icons.history,
+            title: 'Aktivitas Saya',
+            color: AppTheme.primaryColor,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AktivitasScreen()),
               );
             },
           ),
@@ -633,6 +907,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required TextEditingController controller,
     required IconData icon,
     required bool enabled,
+    bool required = true,
   }) {
     return TextFormField(
       controller: controller,
@@ -643,12 +918,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         filled: true,
         fillColor: enabled ? Colors.white : AppTheme.backgroundColor,
       ),
-      validator: (value) {
+      validator: required ? (value) {
         if (value == null || value.isEmpty) {
           return 'Field ini wajib diisi';
         }
         return null;
-      },
+      } : null,
     );
   }
 
@@ -749,10 +1024,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text('PERHATIAN: Menghapus akun akan:'),
             SizedBox(height: 12),
-            Text('• Menghapus semua data profil Anda'),
-            Text('• Menghapus semua produk Anda'),
-            Text('• Menghapus semua foto produk'),
             Text('• Anda tidak bisa login lagi'),
+            Text('• Data Anda tetap tersimpan untuk referensi'),
+            Text('• Produk Anda tetap terlihat di marketplace'),
             SizedBox(height: 12),
             Text(
               'Tindakan ini TIDAK DAPAT dibatalkan!',
@@ -843,21 +1117,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Hapus semua produk user
-      await _deleteAllUserProducts();
-
-      // 2. Hapus user dari PocketBase
       final pb = PocketBaseService.instance;
-      await pb.collection('users').delete(widget.userId);
 
-      // 3. Clear auth store
+      // 1. Soft delete - set deleted_at timestamp (data tetap tersimpan)
+      await pb.collection('users').update(
+        widget.userId,
+        body: {
+          'deleted_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // 2. Clear auth store
       pb.authStore.clear();
 
       if (!mounted) return;
 
+      setState(() => _isLoading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Akun berhasil dihapus'),
+          content: Text('Akun berhasil dinonaktifkan. Data Anda tetap tersimpan.'),
           backgroundColor: AppTheme.successColor,
         ),
       );
@@ -876,23 +1155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.red,
         ),
       );
-    }
-  }
-
-  Future<void> _deleteAllUserProducts() async {
-    try {
-      final pb = PocketBaseService.instance;
-      final result = await pb.collection('produk').getList(
-        filter: 'sellerId = "${widget.userId}"',
-        perPage: 200,
-      );
-
-      for (final product in result.items) {
-        await pb.collection('produk').delete(product.id);
-      }
-    } catch (e) {
-      // Skip error, lanjutkan proses hapus akun
-      debugPrint('Error deleting products: $e');
     }
   }
 }

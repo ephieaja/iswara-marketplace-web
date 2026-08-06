@@ -113,14 +113,26 @@ class _RegisterSellerScreenState extends State<RegisterSellerScreen> {
         'password': _passwordController.text,
         'passwordConfirm': _passwordController.text,
         'name': _namaController.text.trim(),
-        'NamaToko': _namaTokoController.text.trim(),
-        'Alamat': _alamatController.text.trim(),
-        'Daerah': _selectedDaerah,
-        'NoWa': _noWaController.text.trim(),
-        'Organisasi': _selectedOrganisasi,
-        'Tingkat': _selectedTingkat,
-        'Majlis': _namaOrganisasiController.text.trim(),
-        'NoAnggota': _noAnggotaController.text.trim(),
+        // Field casing lowercase (cocok dengan runtime existing).
+        // Sebelumnya pakai CamelCase (NamaToko/Alamat/Daerah/NoWa/NoAnggota)
+        // yang di-silent-drop PB karena column di schema pakai lowercase.
+        'namatoko': _namaTokoController.text.trim(),
+        'alamat': _alamatController.text.trim(),
+        'daerah': _selectedDaerah,
+        'nowa': _noWaController.text.trim(),
+        'organisasi': _selectedOrganisasi,
+        'tingkat': _selectedTingkat,
+        'majlis': _namaOrganisasiController.text.trim(),
+        'noanggota': _noAnggotaController.text.trim(),
+        // Ownership fields (clone pattern iswara_app _canModify).
+        // Seller yang register mandiri adalah owner dari record-nya sendiri.
+        'created_by': 'self',
+        'created_by_nowa': _noWaController.text.trim(),
+        // Auto-seller = false (default untuk manual register).
+        // iswara_member_id akan diisi otomatis saat sinkronisasi ISWARA (Tahap 4).
+        'is_auto_seller': false,
+        'verification_tier': 'simplified',
+        'verification_status': 'pending',
       };
 
       await pb.collection('users').create(body: userData);
@@ -195,18 +207,18 @@ class _RegisterSellerScreenState extends State<RegisterSellerScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.green.shade100,
+                color: Colors.orange.shade100,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.verified, color: Colors.green.shade700, size: 18),
+                  Icon(Icons.hourglass_top, color: Colors.orange.shade700, size: 18),
                   const SizedBox(width: 6),
                   Text(
-                    'AKUN AKTIF',
+                    'MENUNGGU VERIFIKASI',
                     style: TextStyle(
-                      color: Colors.green.shade700,
+                      color: Colors.orange.shade700,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -226,11 +238,11 @@ class _RegisterSellerScreenState extends State<RegisterSellerScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.check, color: Colors.green.shade700, size: 20),
+                      Icon(Icons.verified_user, color: Colors.blue.shade700, size: 20),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          'Akun Anda langsung aktif!',
+                          'Akun Anda akan diverifikasi oleh Admin terlebih dahulu.',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: AppTheme.textPrimary,
@@ -241,7 +253,7 @@ class _RegisterSellerScreenState extends State<RegisterSellerScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Silakan login langsung dengan email dan password yang sudah didaftarkan.',
+                    'Anda akan menerima notifikasi via WhatsApp setelah akun disetujui. Biasanya memakan waktu 1x24 jam.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,

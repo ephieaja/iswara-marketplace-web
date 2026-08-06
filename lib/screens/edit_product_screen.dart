@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../../config/theme.dart';
 import '../../config/pocketbase_config.dart';
 import '../../services/pocketbase_service.dart';
+import '../../utils/ownership_helper.dart';
 
 class EditProductScreen extends StatefulWidget {
   final String productId;
@@ -40,27 +41,26 @@ class _EditProductScreenState extends State<EditProductScreen> {
   String? _selectedDaerah;
   bool _isLoading = false;
   bool _isUploading = false;
-  bool _imageChanged = false;
 
-  // Image handling
-  File? _selectedImage;
-  String? _existingImageUrl;
+  // Image handling - 3 foto
+  final List<XFile?> _selectedImages = [null, null, null];
+  final List<List<int>?> _selectedImageBytes = [null, null, null];
+  final List<String?> _existingImageUrls = [null, null, null];
   final ImagePicker _picker = ImagePicker();
 
-  // Batas ukuran file: 300KB
+  // Batas ukuran file: 300KB per foto
   static const int maxFileSizeBytes = 300 * 1024; // 300 KB
 
   // List kategori produk
   final List<String> _kategoriList = [
-    'Makanan & Minuman',
-    'Fashion & Busana',
-    'Kecantikan & Skincare',
-    'Kerajinan Tangan',
-    'Produk Rumahan',
-    'Elektronik & Gadget',
-    'Hobi &文旅',
-    'Jasa & Layanan',
-    'Pertanian & Peternakan',
+    'MakanandanMinuman',
+    'Fashion',
+    'KerajinanTangan',
+    'Buku',
+    'Travel',
+    'ElektronikdanGadget',
+    'Jasa',
+    'ProdukDigital',
     'Lainnya',
   ];
 
@@ -106,8 +106,21 @@ class _EditProductScreenState extends State<EditProductScreen> {
       text: widget.productData['harga']?.toString() ?? '',
     );
     _selectedKategori = widget.productData['kategori'];
-    _selectedDaerah = widget.productData['Daerah'] ?? widget.daerah;
-    _existingImageUrl = widget.productData['gambar']?.toString();
+    _selectedDaerah = widget.productData['daerah'] ?? widget.daerah;
+
+    // Load existing image URLs from 'gambar' field (array)
+    if (widget.productData.containsKey('gambar')) {
+      final gambar = widget.productData['gambar'];
+      if (gambar is List) {
+        for (int i = 0; i < gambar.length && i < 3; i++) {
+          if (gambar[i] != null && gambar[i].toString().isNotEmpty) {
+            _existingImageUrls[i] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${widget.productId}/${gambar[i]}';
+          }
+        }
+      } else if (gambar != null && gambar.toString().isNotEmpty) {
+        _existingImageUrls[0] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${widget.productId}/${gambar}';
+      }
+    }
   }
 
   @override
@@ -118,24 +131,25 @@ class _EditProductScreenState extends State<EditProductScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(int slot, ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
-        maxWidth: 600,
-        maxHeight: 600,
-        imageQuality: 50,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 60,
       );
 
       if (image != null) {
-        final fileSize = await File(image.path).length();
+        final bytes = await image.readAsBytes();
+        final fileSize = bytes.length;
 
         if (fileSize > maxFileSizeBytes) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Ukuran file terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 300 KB.',
+                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 300 KB per foto.',
               ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 4),
@@ -145,8 +159,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
         }
 
         setState(() {
-          _selectedImage = File(image.path);
-          _imageChanged = true;
+          _selectedImages[slot] = image;
+          _selectedImageBytes[slot] = bytes;
+          _existingImageUrls[slot] = null; // Clear existing if new image selected
         });
       }
     } catch (e) {
@@ -160,13 +175,13 @@ class _EditProductScreenState extends State<EditProductScreen> {
     }
   }
 
-  void _showImageSourceDialog() {
+  void _showImageSourceDialog(int slot) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -180,9 +195,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Pilih Sumber Foto',
-              style: TextStyle(
+            Text(
+              'Pilih Foto ${slot + 1}',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -195,8 +210,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     icon: Icons.photo_library,
                     label: 'Galeri',
                     onTap: () {
-                      Navigator.pop(context);
-                      _pickImage(ImageSource.gallery);
+                      Navigator.pop(ctx);
+                      _pickImage(slot, ImageSource.gallery);
                     },
                   ),
                 ),
@@ -206,8 +221,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     icon: Icons.camera_alt,
                     label: 'Kamera',
                     onTap: () {
-                      Navigator.pop(context);
-                      _pickImage(ImageSource.camera);
+                      Navigator.pop(ctx);
+                      _pickImage(slot, ImageSource.camera);
                     },
                   ),
                 ),
@@ -251,6 +266,13 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
+  void _removeImage(int slot) {
+    setState(() {
+      _selectedImages[slot] = null;
+      _selectedImageBytes[slot] = null;
+    });
+  }
+
   Future<void> _simpanProduk() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -269,42 +291,76 @@ class _EditProductScreenState extends State<EditProductScreen> {
     try {
       final pb = PocketBaseService.instance;
 
+      // Ownership check (clone pattern iswara_app _canModify).
+      // Cegah seller non-super_admin edit produk orang lain.
+      final currentUser = pb.authStore.record;
+      // Kalau produk existing tidak punya created_by (data lama),
+      // fallback ke izinkan edit (graceful degradation).
+      final existingCreatedBy = widget.productData['created_by']?.toString();
+      final existingCreatedByNowa = widget.productData['created_by_nowa']?.toString();
+      if ((existingCreatedBy != null && existingCreatedBy.isNotEmpty) ||
+          (existingCreatedByNowa != null && existingCreatedByNowa.isNotEmpty)) {
+        // Build a synthetic RecordModel-like check
+        final canEdit = isSuperAdmin(currentUser) ||
+            (existingCreatedByNowa != null &&
+                existingCreatedByNowa.isNotEmpty &&
+                normalizePhone(existingCreatedByNowa) == normalizePhone(widget.noWa)) ||
+            (existingCreatedBy == widget.userId);
+        if (!canEdit) {
+          setState(() => _isLoading = false);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Anda tidak punya izin untuk mengedit produk ini'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
       // Prepare data
       final data = <String, dynamic>{
         'nama': _namaProdukController.text.trim(),
         'kategori': _selectedKategori,
         'deskripsi': _deskripsiController.text.trim(),
         'harga': int.tryParse(_hargaController.text.trim()) ?? 0,
-        'Daerah': _selectedDaerah ?? widget.daerah,
+        'daerah': _selectedDaerah ?? widget.daerah,
       };
 
-      // Upload gambar baru jika ada perubahan
-      if (_imageChanged && _selectedImage != null) {
-        setState(() => _isUploading = true);
+      // Prepare files untuk upload - semua foto dengan field name 'gambar'
+      // PocketBase akan menyimpan sebagai array
+      final files = <http.MultipartFile>[];
 
-        final multipartFile = await http.MultipartFile.fromPath(
-          'gambar',
-          _selectedImage!.path,
-        );
+      for (int i = 0; i < 3; i++) {
+        if (_selectedImages[i] != null && _selectedImageBytes[i] != null) {
+          files.add(http.MultipartFile.fromBytes(
+            'gambar', // Semua foto pakai field name 'gambar' (sebagai array)
+            _selectedImageBytes[i]!,
+            filename: _selectedImages[i]!.name,
+          ));
+        }
+      }
 
+      setState(() => _isUploading = true);
+
+      // Update data dengan/s tanpa file
+      if (files.isNotEmpty) {
         await pb.collection(PocketBaseConfig.produkCollection).update(
           widget.productId,
           body: data,
-          files: [multipartFile],
+          files: files,
         );
-
-        setState(() => _isUploading = false);
       } else {
-        // Tanpa perubahan gambar
         await pb.collection(PocketBaseConfig.produkCollection).update(
           widget.productId,
           body: data,
         );
       }
 
-      if (!mounted) return;
+      setState(() => _isUploading = false);
 
-      setState(() => _isLoading = false);
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -313,72 +369,22 @@ class _EditProductScreenState extends State<EditProductScreen> {
         ),
       );
 
-      // Kembali ke halaman sebelumnya
-      Navigator.pop(context, true); // Return true = success
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _isUploading = false;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal menyimpan: $e'),
+          content: Text('Gagal menyimpan produk: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
-  }
-
-  void _hapusGambar() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_outline, color: AppTheme.errorColor),
-            SizedBox(width: 12),
-            Text('Hapus Foto'),
-          ],
-        ),
-        content: const Text('Hapus foto produk ini?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('BATAL'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final pb = PocketBaseService.instance;
-                await pb.collection(PocketBaseConfig.produkCollection).update(
-                  widget.productId,
-                  body: {'gambar': ''},
-                );
-                setState(() {
-                  _selectedImage = null;
-                  _existingImageUrl = null;
-                  _imageChanged = true;
-                });
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Gagal menghapus gambar: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
-            ),
-            child: const Text('HAPUS'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -401,7 +407,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
               _buildHeaderCard(),
               const SizedBox(height: 24),
 
-              // Foto Produk
+              // Foto Produk (3 slot)
               _buildPhotoSection(),
               const SizedBox(height: 24),
 
@@ -549,6 +555,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                         ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -573,22 +580,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
           color: AppTheme.primaryColor.withOpacity(0.2),
         ),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.edit,
-              color: AppTheme.primaryColor,
-              size: 28,
-            ),
+          Icon(
+            Icons.edit,
+            color: AppTheme.primaryColor,
+            size: 28,
           ),
-          const SizedBox(width: 16),
-          const Expanded(
+          SizedBox(width: 16),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -617,8 +617,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   Widget _buildPhotoSection() {
-    final hasImage = _selectedImage != null || (_existingImageUrl != null && _existingImageUrl!.isNotEmpty);
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -627,75 +625,233 @@ class _EditProductScreenState extends State<EditProductScreen> {
         border: Border.all(color: AppTheme.dividerColor),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Preview gambar
-          GestureDetector(
-            onTap: _showImageSourceDialog,
-            child: Container(
-              width: double.infinity,
-              height: 200,
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppTheme.dividerColor,
-                  style: BorderStyle.solid,
+          const Text(
+            'Foto Produk',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Upload hingga 3 foto produk',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 3 Foto Slots
+          Row(
+            children: [
+              _buildPhotoSlot(0),
+              const SizedBox(width: 8),
+              _buildPhotoSlot(1),
+              const SizedBox(width: 8),
+              _buildPhotoSlot(2),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Info
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.blue.shade100),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Maks. 300 KB per foto. Ganti foto dengan klik pada slot.',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-                image: _selectedImage != null
-                    ? DecorationImage(
-                        image: FileImage(_selectedImage!),
-                        fit: BoxFit.cover,
-                      )
-                    : _existingImageUrl != null && _existingImageUrl!.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(_existingImageUrl!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-              ),
-              child: !hasImage
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_photo_alternate_outlined,
-                          size: 64,
-                          color: AppTheme.textLight,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoSlot(int index) {
+    // Check if has new image or existing image
+    final hasNewImage = _selectedImages[index] != null;
+    final hasExistingImage = _existingImageUrls[index] != null;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _showImageSourceDialog(index),
+        child: Container(
+          height: 120,
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: (hasNewImage || hasExistingImage)
+                  ? AppTheme.primaryColor
+                  : AppTheme.dividerColor,
+              width: (hasNewImage || hasExistingImage) ? 2 : 1,
+            ),
+          ),
+          child: hasNewImage
+              ? Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: Image.memory(
+                        Uint8List.fromList(_selectedImageBytes[index]!),
+                        width: double.infinity,
+                        height: 120,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    // Badge nomor
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Klik untuk upload foto',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 14,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    )
-                  : Stack(
+                      ),
+                    ),
+                    // Tombol hapus
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _removeImage(index),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Overlay edit
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: const BorderRadius.vertical(
+                            bottom: Radius.circular(11),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.edit, color: Colors.white, size: 12),
+                            SizedBox(width: 4),
+                            Text(
+                              'Edit',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : hasExistingImage
+                  ? Stack(
                       children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: Image.network(
+                            _existingImageUrls[index]!,
+                            width: double.infinity,
+                            height: 120,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => _buildEmptySlot(index),
+                          ),
+                        ),
+                        // Badge nomor
+                        Positioned(
+                          top: 4,
+                          left: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Overlay edit
                         Positioned(
                           bottom: 0,
                           left: 0,
                           right: 0,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.5),
                               borderRadius: const BorderRadius.vertical(
-                                bottom: Radius.circular(12),
+                                bottom: Radius.circular(11),
                               ),
                             ),
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.edit, color: Colors.white, size: 16),
+                                Icon(Icons.edit, color: Colors.white, size: 12),
                                 SizedBox(width: 4),
                                 Text(
-                                  'Klik untuk更换照片',
+                                  'Edit',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 12,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ],
@@ -703,75 +859,31 @@ class _EditProductScreenState extends State<EditProductScreen> {
                           ),
                         ),
                       ],
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Info
-          if (hasImage) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.blue.shade100),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _imageChanged
-                          ? 'Foto baru akan diupload saat disimpan'
-                          : 'Foto saat ini - klik untuk更换',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Tombol Hapus Foto
-            TextButton.icon(
-              onPressed: _hapusGambar,
-              icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
-              label: const Text(
-                'Hapus Foto',
-                style: TextStyle(color: AppTheme.errorColor),
-              ),
-            ),
-          ],
-
-          if (!hasImage) ...[
-            // Tombol Galeri dan Kamera
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Galeri'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Kamera'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
+                    )
+                  : _buildEmptySlot(index),
+        ),
       ),
+    );
+  }
+
+  Widget _buildEmptySlot(int index) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.add_a_photo_outlined,
+          size: 32,
+          color: AppTheme.textLight,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Foto ${index + 1}',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[500],
+          ),
+        ),
+      ],
     );
   }
 }

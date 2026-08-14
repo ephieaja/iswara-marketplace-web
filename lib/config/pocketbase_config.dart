@@ -1,33 +1,24 @@
 /// Konfigurasi PocketBase untuk ISWARA Marketplace
-/// Database terpisah dari iswara_app
+///
+/// PERUBAHAN ARSITEKTUR 14 Agt 2026:
+/// PB DIGABUNG dengan iswara_app di `pb.iswarajatim.com` (satu instance shared).
+/// Sebelumnya marketplace pakai PB terpisah di Railway.
 class PocketBaseConfig {
-  /// ============================================
-  /// GANTI URL INI SESUAI ENVIRONMENT
-  /// ============================================
-  ///
-  /// LOCAL DEVELOPMENT:
-  ///   http://127.0.0.1:8091
-  ///
-  /// RAILWAY PRODUCTION:
-  ///   https://iswara-pocketbase-marketplace.up.railway.app
-  ///   (ganti dengan URL Railway kamu setelah deploy)
-  ///
-  /// RENDER PRODUCTION:
-  ///   https://iswara-pocketbase-marketplace.onrender.com
-  ///   (ganti dengan URL Render kamu setelah deploy)
-  ///
-  /// ============================================
+  /// Production PB (shared dengan iswara_app).
+  /// Backup ada di VPS Domainesia 202.155.132.150.
+  static const String pocketBaseUrl = 'https://pb.iswarajatim.com';
 
-  // TODO: Ganti URL ini setelah PocketBase di-deploy online
-  // 
- static const String pocketBaseUrl = 'https://iswara-pocketbase-marketplace-production.up.railway.app';
-
-
-  /// Collection names
+  /// Collection names — diselaraskan dengan iswara_app setelah PB digabung.
   static const String usersCollection = 'users';
   static const String produkCollection = 'Produk';
+  static const String produkVarianCollection = 'produk_varian';
   static const String kategoriCollection = 'Kategori';
   static const String pesananCollection = 'Pesanan';
-  static const String pemilikUsahaCollection = 'Pemilik_Usaha';
+
+  /// Legacy collection names (masih dipakai Fase 0, akan direfactor di Fase 3).
   static const String interaksiCollection = 'Interaksi';
+  static const String penjualCollection = 'penjual';
+  static const String visitorsCollection = 'visitors';
+  static const String pemilikUsahaCollection = 'Pemilik_Usaha';
+  static const String productViewsCollection = 'productViews';
 }

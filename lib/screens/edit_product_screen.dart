@@ -6,9 +6,21 @@ import 'package:http/http.dart' as http;
 
 import '../../config/theme.dart';
 import '../../config/pocketbase_config.dart';
+import '../../models/product_model.dart';
 import '../../services/pocketbase_service.dart';
 import '../../utils/ownership_helper.dart';
 
+/// Edit Produk untuk ISWARA Marketplace (Fase 1.5)
+///
+/// PERUBAHAN 14 Agt 2026 (Fase 1):
+/// - PATCH `ProdukMarketplace` (bukan `Produk` legacy)
+/// - Varian di-manage via diff: fetch existing `produk_varian_marketplace`
+///   records di initState, lalu saat Save:
+///   * Varian dengan `existingRecordId` ada di list → PATCH
+///   * Varian baru (`existingRecordId` null) → POST
+///   * Varian yang ada di PB tapi dihapus dari form → DELETE
+/// - `seller` field sudah di-snapshot di ProdukMarketplace record (tidak diubah)
+/// - Max file size 200KB (Fase 1 marketplace), sebelumnya 300KB
 class EditProductScreen extends StatefulWidget {
   final String productId;
   final Map<String, dynamic> productData;
@@ -16,6 +28,11 @@ class EditProductScreen extends StatefulWidget {
   final String namaToko;
   final String daerah;
   final String noWa;
+
+  /// Record id `SellersMarketplace` untuk user ini. Opsional — kalau null,
+  /// screen akan fetch otomatis dari `SellersMarketplace` collection pakai
+  /// `user` relation = users_auth.id.
+  final String? sellersMarketplaceId;
 
   const EditProductScreen({
     super.key,
@@ -25,6 +42,7 @@ class EditProductScreen extends StatefulWidget {
     required this.namaToko,
     required this.daerah,
     required this.noWa,
+    this.sellersMarketplaceId,
   });
 
   @override
@@ -36,6 +54,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   late final TextEditingController _namaProdukController;
   late final TextEditingController _deskripsiController;
   late final TextEditingController _hargaController;
+  late final TextEditingController _varianLabelController;
 
   String? _selectedKategori;
   String? _selectedDaerah;
@@ -48,8 +67,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final List<String?> _existingImageUrls = [null, null, null];
   final ImagePicker _picker = ImagePicker();
 
-  // Batas ukuran file: 300KB per foto
-  static const int maxFileSizeBytes = 300 * 1024; // 300 KB
+  // Varian handling (clone pattern diskusi 8 Agt 2026)
+  final List<_EditVariantEntry> _varianList = [];
+
+  // Batas ukuran file: 200KB per foto (Fase 1 marketplace, samakan dengan PB schema).
+  // Sebelumnya 300KB (clone dari iswara_app).
+  static const int maxFileSizeBytes = 200 * 1024; // 200 KB
 
   // List kategori produk
   final List<String> _kategoriList = [
@@ -105,6 +128,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _hargaController = TextEditingController(
       text: widget.productData['harga']?.toString() ?? '',
     );
+    _varianLabelController = TextEditingController(
+      text: widget.productData['varian_label']?.toString() ?? '',
+    );
     _selectedKategori = widget.productData['kategori'];
     _selectedDaerah = widget.productData['daerah'] ?? widget.daerah;
 
@@ -114,11 +140,80 @@ class _EditProductScreenState extends State<EditProductScreen> {
       if (gambar is List) {
         for (int i = 0; i < gambar.length && i < 3; i++) {
           if (gambar[i] != null && gambar[i].toString().isNotEmpty) {
-            _existingImageUrls[i] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${widget.productId}/${gambar[i]}';
+            _existingImageUrls[i] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkMarketplaceCollection}/${widget.productId}/${gambar[i]}';
           }
         }
       } else if (gambar != null && gambar.toString().isNotEmpty) {
-        _existingImageUrls[0] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${widget.productId}/${gambar}';
+        _existingImageUrls[0] = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkMarketplaceCollection}/${widget.productId}/${gambar}';
+      }
+    }
+
+    // Load existing variants dari `produk_varian_marketplace` collection (Fase 1).
+    // Fallback ke JSON inline `varian_list` kalau gagal (untuk backward compat
+    // dengan data lama yang masih di Produk legacy).
+    _loadExistingVariants();
+  }
+
+  /// Fetch existing varian records dari `produk_varian_marketplace` collection.
+  /// Pre-fill `_varianList` dengan data + existingRecordId.
+  Future<void> _loadExistingVariants() async {
+    try {
+      final pb = PocketBaseService.instance;
+      final result = await pb
+          .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+          .getList(
+            filter: 'produk = "${widget.productId}"',
+            perPage: 50,
+          );
+
+      if (!mounted) return;
+
+      if (result.items.isNotEmpty) {
+        // Pakai data dari PB collection
+        setState(() {
+          for (final record in result.items) {
+            final entry = _EditVariantEntry();
+            entry.namaController.text = record.data['nama']?.toString() ?? '';
+            entry.hargaController.text = record.data['harga']?.toString() ?? '';
+            entry.stokController.text = record.data['stok']?.toString() ?? '0';
+            entry.skuController.text = record.data['sku']?.toString() ?? '';
+            entry.existingRecordId = record.id;
+            _varianList.add(entry);
+          }
+        });
+      } else {
+        // Fallback ke JSON inline (legacy data)
+        final rawVarianList = widget.productData['varian_list'];
+        if (rawVarianList is List) {
+          for (final v in rawVarianList) {
+            if (v is Map) {
+              final entry = _EditVariantEntry();
+              entry.namaController.text = v['nama']?.toString() ?? '';
+              entry.hargaController.text = v['harga']?.toString() ?? '';
+              entry.stokController.text = v['stok']?.toString() ?? '0';
+              entry.skuController.text = v['sku']?.toString() ?? '';
+              _varianList.add(entry);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error load existing variants: $e');
+      // Fallback ke JSON inline
+      final rawVarianList = widget.productData['varian_list'];
+      if (rawVarianList is List && mounted) {
+        setState(() {
+          for (final v in rawVarianList) {
+            if (v is Map) {
+              final entry = _EditVariantEntry();
+              entry.namaController.text = v['nama']?.toString() ?? '';
+              entry.hargaController.text = v['harga']?.toString() ?? '';
+              entry.stokController.text = v['stok']?.toString() ?? '0';
+              entry.skuController.text = v['sku']?.toString() ?? '';
+              _varianList.add(entry);
+            }
+          }
+        });
       }
     }
   }
@@ -128,6 +223,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _namaProdukController.dispose();
     _deskripsiController.dispose();
     _hargaController.dispose();
+    _varianLabelController.dispose();
+    for (final v in _varianList) {
+      v.dispose();
+    }
     super.dispose();
   }
 
@@ -149,7 +248,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 300 KB per foto.',
+                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 200 KB per foto.',
               ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 4),
@@ -294,13 +393,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
       // Ownership check (clone pattern iswara_app _canModify).
       // Cegah seller non-super_admin edit produk orang lain.
       final currentUser = pb.authStore.record;
-      // Kalau produk existing tidak punya created_by (data lama),
-      // fallback ke izinkan edit (graceful degradation).
       final existingCreatedBy = widget.productData['created_by']?.toString();
       final existingCreatedByNowa = widget.productData['created_by_nowa']?.toString();
       if ((existingCreatedBy != null && existingCreatedBy.isNotEmpty) ||
           (existingCreatedByNowa != null && existingCreatedByNowa.isNotEmpty)) {
-        // Build a synthetic RecordModel-like check
         final canEdit = isSuperAdmin(currentUser) ||
             (existingCreatedByNowa != null &&
                 existingCreatedByNowa.isNotEmpty &&
@@ -319,17 +415,20 @@ class _EditProductScreenState extends State<EditProductScreen> {
         }
       }
 
-      // Prepare data
+      // Prepare data ProdukMarketplace (Fase 1 schema)
       final data = <String, dynamic>{
         'nama': _namaProdukController.text.trim(),
         'kategori': _selectedKategori,
         'deskripsi': _deskripsiController.text.trim(),
         'harga': int.tryParse(_hargaController.text.trim()) ?? 0,
         'daerah': _selectedDaerah ?? widget.daerah,
+        // Varian label tetap di Produk (varian_list di-collection terpisah)
+        'varian_label': _varianLabelController.text.trim(),
+        // 'varian_list' JSON inline TIDAK dipakai lagi (Fase 1)
       };
 
       // Prepare files untuk upload - semua foto dengan field name 'gambar'
-      // PocketBase akan menyimpan sebagai array
+      // PocketBase akan menyimpan sebagai array (max 15 file, 200KB each)
       final files = <http.MultipartFile>[];
 
       for (int i = 0; i < 3; i++) {
@@ -344,21 +443,105 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
       setState(() => _isUploading = true);
 
-      // Update data dengan/s tanpa file
+      // PATCH ProdukMarketplace (Fase 1)
       if (files.isNotEmpty) {
-        await pb.collection(PocketBaseConfig.produkCollection).update(
+        await pb
+            .collection(PocketBaseConfig.produkMarketplaceCollection)
+            .update(
           widget.productId,
           body: data,
           files: files,
         );
       } else {
-        await pb.collection(PocketBaseConfig.produkCollection).update(
+        await pb
+            .collection(PocketBaseConfig.produkMarketplaceCollection)
+            .update(
           widget.productId,
           body: data,
         );
       }
 
       setState(() => _isUploading = false);
+
+      // ============================================
+      // DIFF SYNC VARIAN (Fase 1)
+      // ============================================
+      // Track id varian existing di awal form (sebelum user edit).
+      // Setelah Save, id yang masih ada di _varianList → PATCH
+      //                              id baru → POST
+      //                              id di original tapi TIDAK ada di _varianList → DELETE
+      final Set<String> originalIds = _varianList
+          .map((v) => v.existingRecordId)
+          .whereType<String>()
+          .toSet();
+      final Set<String> keptIds = {};
+
+      for (final variant in _varianList) {
+        // Skip varian kosong (nama kosong)
+        if (variant.namaController.text.trim().isEmpty) {
+          // Kalau ada existingRecordId tapi nama kosong, DELETE
+          if (variant.existingRecordId != null) {
+            try {
+              await pb
+                  .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                  .delete(variant.existingRecordId!);
+            } catch (e) {
+              debugPrint('Error DELETE varian kosong: $e');
+            }
+          }
+          continue;
+        }
+
+        final harga = int.tryParse(variant.hargaController.text.trim()) ?? 0;
+        final stok = int.tryParse(variant.stokController.text.trim()) ?? 0;
+        final sku = variant.skuController.text.trim();
+
+        try {
+          if (variant.existingRecordId == null) {
+            // POST varian baru
+            await pb
+                .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                .create(
+              body: {
+                'produk': widget.productId,
+                'nama': variant.namaController.text.trim(),
+                'harga': harga,
+                'stok': stok,
+                if (sku.isNotEmpty) 'sku': sku,
+              },
+            );
+          } else {
+            // PATCH varian existing
+            await pb
+                .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                .update(
+              variant.existingRecordId!,
+              body: {
+                'nama': variant.namaController.text.trim(),
+                'harga': harga,
+                'stok': stok,
+                if (sku.isNotEmpty) 'sku': sku,
+              },
+            );
+            keptIds.add(variant.existingRecordId!);
+          }
+        } catch (e) {
+          debugPrint('Error sync varian: $e');
+          // Lanjut ke varian berikutnya (partial save OK)
+        }
+      }
+
+      // DELETE varian yang ada di original tapi tidak ada di keptIds
+      final removedIds = originalIds.difference(keptIds);
+      for (final removedId in removedIds) {
+        try {
+          await pb
+              .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+              .delete(removedId);
+        } catch (e) {
+          debugPrint('Error DELETE removed varian: $e');
+        }
+      }
 
       if (!mounted) return;
 
@@ -503,6 +686,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 24),
+
+              // Varian section (clone pattern diskusi 8 Agt 2026)
+              _buildVarianSection(),
               const SizedBox(height: 32),
 
               // Tombol Simpan
@@ -672,7 +859,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'Maks. 300 KB per foto. Ganti foto dengan klik pada slot.',
+                    'Maks. 200 KB per foto. Ganti foto dengan klik pada slot.',
                     style: TextStyle(
                       color: Colors.blue,
                       fontSize: 12,
@@ -886,4 +1073,214 @@ class _EditProductScreenState extends State<EditProductScreen> {
       ],
     );
   }
+
+  // ========================================================
+  // VARIAN SECTION (clone pattern diskusi 8 Agt 2026)
+  // ========================================================
+  Widget _buildVarianSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.style, color: AppTheme.primaryColor, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Varian Produk',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: AppTheme.primaryColor),
+                tooltip: 'Tambah Varian',
+                onPressed: _addVariant,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Opsional. Mis. warna (fashion), rasa (makanan), ukuran (pakaian). Tiap varian bisa punya harga sendiri.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _varianLabelController,
+            decoration: const InputDecoration(
+              labelText: 'Label Varian',
+              hintText: 'Mis. Warna, Rasa, Ukuran',
+              prefixIcon: Icon(Icons.label_outline),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_varianList.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.grey.shade500, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Belum ada varian. Produk tanpa varian tetap bisa dijual.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._varianList.asMap().entries.map((entry) => _buildVariantCard(entry.key, entry.value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVariantCard(int index, _EditVariantEntry variant) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Varian ${index + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _removeVariant(index),
+                child: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: variant.namaController,
+            decoration: const InputDecoration(
+              labelText: 'Nama Varian *',
+              hintText: 'Mis. Merah, Pedas, L',
+              isDense: true,
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: variant.hargaController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Harga *',
+                    hintText: '50000',
+                    prefixIcon: Icon(Icons.attach_money, size: 18),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: variant.stokController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Stok',
+                    hintText: '0',
+                    prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: variant.skuController,
+            decoration: const InputDecoration(
+              labelText: 'SKU (opsional)',
+              hintText: 'Mis. BTK-MRH',
+              prefixIcon: Icon(Icons.qr_code, size: 18),
+              isDense: true,
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addVariant() {
+    setState(() {
+      _varianList.add(_EditVariantEntry());
+    });
+  }
+
+  void _removeVariant(int index) {
+    setState(() {
+      _varianList[index].dispose();
+      _varianList.removeAt(index);
+    });
+  }
 }
+
+/// Model lokal untuk variant entry di form edit product.
+/// Fase 1: tambah `existingRecordId` untuk track record id `produk_varian_marketplace`
+/// (null kalau varian ini BARU, belum ada di PB).
+class _EditVariantEntry {
+  final TextEditingController namaController = TextEditingController();
+  final TextEditingController hargaController = TextEditingController();
+  final TextEditingController stokController = TextEditingController(text: '0');
+  final TextEditingController skuController = TextEditingController();
+
+  /// Record id di `produk_varian_marketplace` collection (Fase 1).
+  /// - null: varian BARU, akan di-POST saat Save
+  /// - non-null: varian existing, akan di-PATCH saat Save (atau DELETE kalau dihapus)
+  String? existingRecordId;
+
+  void dispose() {
+    namaController.dispose();
+    hargaController.dispose();
+    stokController.dispose();
+    skuController.dispose();
+  }
+
+  ProductVariant toVariant() {
+    return ProductVariant(
+      nama: namaController.text.trim(),
+      harga: int.tryParse(hargaController.text.trim()) ?? 0,
+      stok: int.tryParse(stokController.text.trim()) ?? 0,
+      sku: skuController.text.trim().isEmpty ? null : skuController.text.trim(),
+    );
+  }
+}
+

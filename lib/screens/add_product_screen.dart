@@ -8,13 +8,27 @@ import 'package:pocketbase/pocketbase.dart';
 
 import '../../config/theme.dart';
 import '../../config/pocketbase_config.dart';
+import '../../models/product_model.dart';
 import '../../services/pocketbase_service.dart';
 
+/// Tambah Produk untuk ISWARA Marketplace (Fase 1.5)
+///
+/// PERUBAHAN 14 Agt 2026 (Fase 1):
+/// - POST ke `ProdukMarketplace` (bukan `Produk` legacy)
+/// - Varian POST terpisah ke `produk_varian_marketplace` (bukan JSON array inline)
+/// - `seller` field = record id `SellersMarketplace` (bukan user id langsung)
+/// - Max file size 200KB (sesuai PB schema Fase 1), sebelumnya 300KB (clone iswara_app)
 class AddProductScreen extends StatefulWidget {
   final String userId;
   final String namaToko;
   final String daerah;
   final String noWa;
+
+  /// Record id `SellersMarketplace` untuk user ini. Opsional — kalau null,
+  /// screen akan fetch otomatis dari `SellersMarketplace` collection pakai
+  /// `user` relation = users_auth.id. Kalau tetap tidak ketemu, tampil error.
+  final String? sellersMarketplaceId;
+
   final Function(Map<String, dynamic>)? onProductAdded;
 
   const AddProductScreen({
@@ -23,6 +37,7 @@ class AddProductScreen extends StatefulWidget {
     required this.namaToko,
     required this.daerah,
     required this.noWa,
+    this.sellersMarketplaceId,
     this.onProductAdded,
   });
 
@@ -36,6 +51,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _deskripsiController = TextEditingController();
   final _hargaController = TextEditingController();
   final _beratController = TextEditingController(text: '100'); // Default 100 gram
+  final _varianLabelController = TextEditingController();
 
   String? _selectedKategori;
   String? _selectedDaerah;
@@ -49,8 +65,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final List<List<int>?> _selectedImageBytes = [null, null, null];
   final ImagePicker _picker = ImagePicker();
 
-  // Batas ukuran file: 300KB per foto
-  static const int maxFileSizeBytes = 300 * 1024; // 300 KB
+  // Varian handling (clone pattern diskusi 8 Agt 2026)
+  // List variant yang ditambahkan dinamis oleh user.
+  // Tiap variant punya: nama, harga, stok, sku (sku optional).
+  final List<_VariantEntry> _varianList = [];
+
+  // Batas ukuran file: 200KB per foto (Fase 1 marketplace, samakan dengan PB schema).
+  // Sebelumnya 300KB (clone dari iswara_app).
+  static const int maxFileSizeBytes = 200 * 1024; // 200 KB
   // Batas maksimal produk per akun
   static const int maxProductsPerUser = 15;
 
@@ -104,10 +126,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _checkProductCount() async {
     try {
       final pb = PocketBaseService.instance;
-      final result = await pb.collection(PocketBaseConfig.produkCollection).getList(
-        filter: 'sellerid = "${widget.userId}"',
-        perPage: 1,
-      );
+      String? sellerId = widget.sellersMarketplaceId;
+      if (sellerId == null) {
+        sellerId = await _fetchSellersMarketplaceId();
+      }
+      if (sellerId == null) {
+        // Tidak ada SellersMarketplace record — anggap 0 produk
+        setState(() {
+          _currentProductCount = 0;
+          _isCheckingProductCount = false;
+        });
+        return;
+      }
+      final result = await pb
+          .collection(PocketBaseConfig.produkMarketplaceCollection)
+          .getList(
+            filter: 'seller = "$sellerId"',
+            perPage: 1,
+          );
       setState(() {
         _currentProductCount = result.totalItems;
         _isCheckingProductCount = false;
@@ -120,12 +156,44 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
+  /// Fetch SellersMarketplace record id untuk current user (users_auth).
+  /// Pakai field `user` (relation) = users_auth.id.
+  /// Return null kalau:
+  /// - User belum login
+  /// - Belum jadi seller (belum daftar SellersMarketplace)
+  /// - Collection tidak accessible
+  Future<String?> _fetchSellersMarketplaceId() async {
+    try {
+      final pb = PocketBaseService.instance;
+      final authRecord = pb.authStore.record;
+      if (authRecord == null) return null;
+
+      final result = await pb
+          .collection(PocketBaseConfig.sellersMarketplaceCollection)
+          .getList(
+            filter: 'user = "${authRecord.id}"',
+            perPage: 1,
+          );
+      if (result.items.isNotEmpty) {
+        return result.items.first.id;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching SellersMarketplace: $e');
+      return null;
+    }
+  }
+
   @override
   void dispose() {
     _namaProdukController.dispose();
     _deskripsiController.dispose();
     _hargaController.dispose();
     _beratController.dispose();
+    _varianLabelController.dispose();
+    for (final v in _varianList) {
+      v.dispose();
+    }
     super.dispose();
   }
 
@@ -147,7 +215,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 300 KB per foto.\n\nSaran: Kompres foto terlebih dahulu.',
+                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB).\nMaksimum 200 KB per foto.\n\nSaran: Kompres foto terlebih dahulu.',
               ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 4),
@@ -307,6 +375,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
+    // Resolve sellerId (Fase 1 — pakai SellersMarketplace record id)
+    String? sellerId = widget.sellersMarketplaceId;
+    if (sellerId == null) {
+      sellerId = await _fetchSellersMarketplaceId();
+    }
+    if (sellerId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Anda belum terdaftar sebagai seller.\n'
+            'Silakan daftar menjadi seller terlebih dahulu.',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -314,28 +402,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       setState(() => _isUploading = true);
 
+      final hargaProduk = _hargaController.text.trim().isEmpty
+          ? 0
+          : int.tryParse(_hargaController.text.trim()) ?? 0;
+      final beratProduk = _beratController.text.trim().isEmpty
+          ? 100
+          : int.tryParse(_beratController.text.trim()) ?? 100;
+
       RecordModel result;
 
       if (_selectedImages.any((img) => img != null)) {
         // Prepare multipart request - kirim field langsung tanpa jsonEncode
-        final uri = Uri.parse('${PocketBaseConfig.pocketBaseUrl}/api/collections/${PocketBaseConfig.produkCollection}/records');
+        final uri = Uri.parse(
+          '${PocketBaseConfig.pocketBaseUrl}/api/collections/${PocketBaseConfig.produkMarketplaceCollection}/records',
+        );
         final request = http.MultipartRequest('POST', uri);
 
-        // Add fields langsung (bukan jsonEncode)
-        request.fields['sellerid'] = widget.userId;
+        // Add fields (Fase 1 schema ProdukMarketplace)
+        // `seller` adalah relation ke SellersMarketplace record id
+        request.fields['seller'] = sellerId;
+        // `namatoko` snapshot (diambil dari SellersMarketplace.namatoko via widget.namaToko)
         request.fields['namatoko'] = widget.namaToko;
         request.fields['nama'] = _namaProdukController.text.trim();
         request.fields['kategori'] = _selectedKategori ?? '';
         request.fields['deskripsi'] = _deskripsiController.text.trim();
-        request.fields['harga'] = (_hargaController.text.trim().isEmpty ? 0 : int.tryParse(_hargaController.text.trim()) ?? 0).toString();
-        request.fields['berat'] = (_beratController.text.trim().isEmpty ? 100 : int.tryParse(_beratController.text.trim()) ?? 100).toString();
+        request.fields['harga'] = hargaProduk.toString();
+        request.fields['berat'] = beratProduk.toString();
         request.fields['daerah'] = _selectedDaerah ?? widget.daerah;
         request.fields['nowa'] = widget.noWa;
-        // Ownership fields (clone pattern iswara_app, lihat ownership_helper.dart).
+        request.fields['status'] = 'aktif'; // default sesuai PB schema
+        // Varian label (clone pattern diskusi 8 Agt 2026)
+        // NOTE: list varian TIDAK dikirim di ProdukMarketplace — sekarang
+        // masing-masing varian di-POST sebagai record terpisah di
+        // `produk_varian_marketplace` collection.
+        request.fields['varian_label'] = _varianLabelController.text.trim();
+        // Ownership fields (clone pattern iswara_app, lihat ownership_helper.dart)
         request.fields['created_by'] = widget.userId;
         request.fields['created_by_nowa'] = widget.noWa;
 
-        // Add files - each image for 'gambar' field
+        // Add files - each image for 'gambar' field (multi-upload, max 15)
         for (int i = 0; i < 3; i++) {
           if (_selectedImageBytes[i] != null) {
             request.files.add(http.MultipartFile.fromBytes(
@@ -357,26 +462,90 @@ class _AddProductScreenState extends State<AddProductScreen> {
           throw Exception('Upload failed: ${response.statusCode} - ${response.body}');
         }
       } else {
-        // Tanpa gambar - pakai SDK biasa
-        result = await pb.collection(PocketBaseConfig.produkCollection).create(
+        // Tanpa gambar - pakai SDK biasa (PB schema tetap wajib ada gambar,
+        // tapi blok ini dipertahankan untuk backward compat).
+        result = await pb
+            .collection(PocketBaseConfig.produkMarketplaceCollection)
+            .create(
           body: {
-            'sellerid': widget.userId,
+            'seller': sellerId,
             'namatoko': widget.namaToko,
             'nama': _namaProdukController.text.trim(),
             'kategori': _selectedKategori ?? '',
             'deskripsi': _deskripsiController.text.trim(),
-            'harga': int.tryParse(_hargaController.text.trim()) ?? 0,
-            'berat': int.tryParse(_beratController.text.trim()) ?? 100,
+            'harga': hargaProduk,
+            'berat': beratProduk,
             'daerah': _selectedDaerah ?? widget.daerah,
             'nowa': widget.noWa,
-            // Ownership fields (clone pattern iswara_app, lihat ownership_helper.dart).
-            'created_by': widget.userId,
-            'created_by_nowa': widget.noWa,
+            'status': 'aktif',
+            'varian_label': _varianLabelController.text.trim(),
           },
         );
       }
 
       setState(() => _isUploading = false);
+
+      // ============================================
+      // POST varian ke `produk_varian_marketplace` collection (Fase 1)
+      // ============================================
+      // Loop _varianList, filter yang valid (nama+harga wajib), POST satu-satu.
+      // Gambar varian di-upload sebagai file multi `gambar` di record varian.
+      final produkBaruId = result.id;
+      final varianListValid = _varianList
+          .where((v) => v.namaController.text.trim().isNotEmpty)
+          .toList();
+
+      for (final variant in varianListValid) {
+        final hargaVarian =
+            int.tryParse(variant.hargaController.text.trim()) ?? 0;
+        final stokVarian =
+            int.tryParse(variant.stokController.text.trim()) ?? 0;
+        final skuVarian = variant.skuController.text.trim();
+
+        try {
+          if (variant.gambarBytes != null) {
+            // Pakai multipart kalau ada gambar
+            final uri = Uri.parse(
+              '${PocketBaseConfig.pocketBaseUrl}/api/collections/${PocketBaseConfig.produkVarianMarketplaceCollection}/records',
+            );
+            final req = http.MultipartRequest('POST', uri);
+            req.fields['produk'] = produkBaruId;
+            req.fields['nama'] = variant.namaController.text.trim();
+            req.fields['harga'] = hargaVarian.toString();
+            req.fields['stok'] = stokVarian.toString();
+            if (skuVarian.isNotEmpty) {
+              req.fields['sku'] = skuVarian;
+            }
+            req.files.add(http.MultipartFile.fromBytes(
+              'gambar',
+              variant.gambarBytes!,
+              filename: variant.gambarName ?? 'varian.jpg',
+            ));
+            final streamed = await req.send();
+            final resp = await http.Response.fromStream(streamed);
+            if (resp.statusCode < 200 || resp.statusCode >= 300) {
+              debugPrint(
+                  'Varian POST gagal: ${resp.statusCode} - ${resp.body}');
+            }
+          } else {
+            // Tanpa gambar - SDK biasa
+            await pb
+                .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                .create(
+              body: {
+                'produk': produkBaruId,
+                'nama': variant.namaController.text.trim(),
+                'harga': hargaVarian,
+                'stok': stokVarian,
+                if (skuVarian.isNotEmpty) 'sku': skuVarian,
+              },
+            );
+          }
+        } catch (e) {
+          debugPrint('Error POST varian: $e');
+          // Lanjut ke varian berikutnya (partial save OK)
+        }
+      }
 
       if (!mounted) return;
 
@@ -557,6 +726,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 24),
+
+              // Section Varian (opsional) - clone pattern diskusi 8 Agt 2026
+              _buildVarianSection(),
               const SizedBox(height: 32),
 
               // Tombol Simpan
@@ -794,7 +967,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Maks. 300 KB per foto. Kompres jika perlu.',
+                    'Maks. 200 KB per foto. Kompres jika perlu.',
                     style: TextStyle(
                       color: Colors.blue.shade700,
                       fontSize: 12,
@@ -935,6 +1108,290 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  // ========================================================
+  // VARIAN SECTION (clone pattern diskusi 8 Agt 2026)
+  // ========================================================
+  Widget _buildVarianSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.style, color: AppTheme.primaryColor, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Varian Produk',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: AppTheme.primaryColor),
+                tooltip: 'Tambah Varian',
+                onPressed: _addVariant,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Opsional. Mis. warna (fashion), rasa (makanan), ukuran (pakaian). Tiap varian bisa punya harga sendiri.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _varianLabelController,
+            decoration: const InputDecoration(
+              labelText: 'Label Varian',
+              hintText: 'Mis. Warna, Rasa, Ukuran',
+              prefixIcon: Icon(Icons.label_outline),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // List varian dinamis
+          if (_varianList.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.grey.shade500, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Belum ada varian. Produk tanpa varian tetap bisa dijual.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._varianList.asMap().entries.map((entry) => _buildVariantCard(entry.key, entry.value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVariantImagePicker(_VariantEntry variant, int index) {
+    return GestureDetector(
+      onTap: () => _pickVariantImage(variant, index),
+      child: Container(
+        height: 90,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: variant.gambarBytes != null ? AppTheme.primaryColor : AppTheme.dividerColor,
+            width: variant.gambarBytes != null ? 2 : 1,
+            style: variant.gambarBytes != null ? BorderStyle.solid : BorderStyle.solid,
+          ),
+        ),
+        child: variant.gambarBytes != null
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: Image.memory(
+                      variant.gambarBytes!,
+                      width: double.infinity,
+                      height: 90,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: () => _removeVariantImage(variant),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close, color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_a_photo_outlined, color: Colors.grey.shade500, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Gambar Varian (opsional)',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Future<void> _pickVariantImage(_VariantEntry variant, int index) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 60,
+      );
+
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        final fileSize = bytes.length;
+        if (fileSize > maxFileSizeBytes) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Ukuran foto terlalu besar (${(fileSize / 1024).toStringAsFixed(1)} KB). Maks ${(maxFileSizeBytes / 1024).toStringAsFixed(0)} KB per foto.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+        setState(() {
+          variant.gambarBytes = bytes;
+          variant.gambarName = image.name;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memilih gambar: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _removeVariantImage(_VariantEntry variant) {
+    setState(() {
+      variant.gambarBytes = null;
+      variant.gambarName = null;
+    });
+  }
+
+  Widget _buildVariantCard(int index, _VariantEntry variant) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Varian ${index + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _removeVariant(index),
+                child: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Gambar variant (Shopee pattern) - clone 8 Agt 2026
+          _buildVariantImagePicker(variant, index),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: variant.namaController,
+            decoration: const InputDecoration(
+              labelText: 'Nama Varian *',
+              hintText: 'Mis. Merah, Pedas, L',
+              isDense: true,
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: variant.hargaController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Harga *',
+                    hintText: '50000',
+                    prefixIcon: Icon(Icons.attach_money, size: 18),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: variant.stokController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Stok',
+                    hintText: '0',
+                    prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: variant.skuController,
+            decoration: const InputDecoration(
+              labelText: 'SKU (opsional)',
+              hintText: 'Mis. BTK-MRH',
+              prefixIcon: Icon(Icons.qr_code, size: 18),
+              isDense: true,
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addVariant() {
+    setState(() {
+      _varianList.add(_VariantEntry());
+    });
+  }
+
+  void _removeVariant(int index) {
+    setState(() {
+      _varianList[index].dispose();
+      _varianList.removeAt(index);
+    });
+  }
+
   Widget _buildTipsCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -962,7 +1419,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildTipItem(Icons.compress, 'Kompres foto jadi 100-200 KB'),
+          _buildTipItem(Icons.compress, 'Kompres foto jadi 80-180 KB'),
           _buildTipItem(Icons.crop_free, 'Background polos & terang'),
           _buildTipItem(Icons.wb_sunny_outlined, 'Pencahayaan cukup'),
           _buildTipItem(Icons.center_focus_strong, 'Fokuskan pada produk'),
@@ -992,5 +1449,52 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Model lokal untuk variant entry di form add/edit product.
+/// Punya field nama, harga, stok, sku — sama dengan ProductVariant
+/// tapi tanpa JSON parsing (untuk performance di form).
+class _VariantEntry {
+  final TextEditingController namaController = TextEditingController();
+  final TextEditingController hargaController = TextEditingController();
+  final TextEditingController stokController = TextEditingController(text: '0');
+  final TextEditingController skuController = TextEditingController();
+
+  // Gambar variant (Shopee pattern, clone 8 Agt 2026)
+  // Bytes gambar untuk upload. Null kalau user tidak upload.
+  Uint8List? gambarBytes;
+  String? gambarName;  // Original filename dari image_picker
+
+  void dispose() {
+    namaController.dispose();
+    hargaController.dispose();
+    stokController.dispose();
+    skuController.dispose();
+  }
+
+  /// Convert ke ProductVariant untuk disimpan di ProductModel.
+  /// `gambarName` hanya dipakai kalau gambar sudah ter-upload.
+  /// Kalau user upload gambar tapi belum save, gambarBytes belum dipakai.
+  ProductVariant toVariant({String? uploadedGambarName}) {
+    return ProductVariant(
+      nama: namaController.text.trim(),
+      harga: int.tryParse(hargaController.text.trim()) ?? 0,
+      stok: int.tryParse(stokController.text.trim()) ?? 0,
+      sku: skuController.text.trim().isEmpty ? null : skuController.text.trim(),
+      gambar: uploadedGambarName,
+    );
+  }
+
+  /// Validasi: nama dan harga wajib diisi.
+  String? validate() {
+    if (namaController.text.trim().isEmpty) {
+      return 'Nama varian wajib diisi';
+    }
+    final harga = int.tryParse(hargaController.text.trim());
+    if (harga == null || harga <= 0) {
+      return 'Harga varian wajib diisi dan harus > 0';
+    }
+    return null;
   }
 }

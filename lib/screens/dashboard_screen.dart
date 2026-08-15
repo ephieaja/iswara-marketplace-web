@@ -224,39 +224,92 @@ class _SellerHomeTabState extends State<_SellerHomeTab> {
     try {
       final pb = PocketBaseService.instance;
 
-      // Load products
-      final productsResult = await pb.collection(PocketBaseConfig.produkCollection).getList(
-        filter: 'sellerid = "${widget.userId}"',
-        sort: '-created',
-        perPage: 50,
-      );
+      // Resolve SellersMarketplace record id untuk current user (Fase 1)
+      String? sellerId;
+      try {
+        final sellerResult = await pb
+            .collection(PocketBaseConfig.sellersMarketplaceCollection)
+            .getList(
+              filter: 'user = "${widget.userId}"',
+              perPage: 1,
+            );
+        if (sellerResult.items.isNotEmpty) {
+          sellerId = sellerResult.items.first.id;
+        }
+      } catch (e) {
+        debugPrint('Error fetching SellersMarketplace: $e');
+      }
 
-      // Load interactions
-      final interaksiResult = await pb.collection(PocketBaseConfig.interaksiCollection).getList(
-        filter: 'idpenjual = "${widget.userId}"',
-        sort: '-created',
-        perPage: 50,
-      );
+      // Load products dari ProdukMarketplace (Fase 1)
+      // Filter by `seller` (relation id) = sellersMarketplace record id
+      List<RecordModel> products = [];
+      if (sellerId != null) {
+        try {
+          final productsResult = await pb
+              .collection(PocketBaseConfig.produkMarketplaceCollection)
+              .getList(
+                filter: 'seller = "$sellerId"',
+                sort: '-created',
+                perPage: 50,
+              );
+          products = productsResult.items;
+        } catch (e) {
+          debugPrint('Error loading ProdukMarketplace: $e');
+        }
+      }
 
-      // Load orders (pesanan masuk)
-      final ordersResult = await pb.collection(PocketBaseConfig.pesananCollection).getList(
-        filter: 'sellerid = "${widget.userId}"',
-        sort: '-created',
-        perPage: 50,
-      );
+      // Load interactions (legacy, masih pakai Interaksi collection existing)
+      List<RecordModel> interaksi = [];
+      try {
+        final interaksiResult = await pb
+            .collection(PocketBaseConfig.interaksiCollection)
+            .getList(
+              filter: 'idpenjual = "${widget.userId}"',
+              sort: '-created',
+              perPage: 50,
+            );
+        interaksi = interaksiResult.items;
+      } catch (e) {
+        debugPrint('Error loading Interaksi: $e');
+      }
 
-      // Load views
-      final viewsResult = await pb.collection(PocketBaseConfig.productViewsCollection).getList(
-        filter: 'sellerid = "${widget.userId}"',
-        perPage: 1,
-      );
+      // Load orders (pesanan masuk) — pakai PesananMarketplace (Fase 1)
+      List<RecordModel> orders = [];
+      if (sellerId != null) {
+        try {
+          final ordersResult = await pb
+              .collection(PocketBaseConfig.pesananMarketplaceCollection)
+              .getList(
+                filter: 'seller = "$sellerId"',
+                sort: '-created',
+                perPage: 50,
+              );
+          orders = ordersResult.items;
+        } catch (e) {
+          debugPrint('Error loading PesananMarketplace: $e');
+        }
+      }
+
+      // Load views (legacy)
+      int totalViews = 0;
+      try {
+        final viewsResult = await pb
+            .collection(PocketBaseConfig.productViewsCollection)
+            .getList(
+              filter: 'sellerid = "${widget.userId}"',
+              perPage: 1,
+            );
+        totalViews = viewsResult.totalItems;
+      } catch (e) {
+        debugPrint('Error loading productViews: $e');
+      }
 
       if (mounted) {
         setState(() {
-          _products = productsResult.items;
-          _interaksi = interaksiResult.items;
-          _orders = ordersResult.items;
-          _totalViews = viewsResult.totalItems;
+          _products = products;
+          _interaksi = interaksi;
+          _orders = orders;
+          _totalViews = totalViews;
           _isLoading = false;
         });
       }
@@ -737,15 +790,15 @@ class _SellerHomeTabState extends State<_SellerHomeTab> {
         if (data.containsKey('gambar')) {
           final gambar = data['gambar'];
           if (gambar is List && gambar.isNotEmpty) {
-            imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${product.id}/${gambar[0]}';
+            imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkMarketplaceCollection}/${product.id}/${gambar[0]}';
           } else if (gambar != null && gambar.toString().isNotEmpty) {
-            imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${product.id}/${gambar}';
+            imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkMarketplaceCollection}/${product.id}/${gambar}';
           }
         }
         if (imageUrl == null) {
           for (final field in ['gambar1', 'gambar2', 'gambar3']) {
             if (data.containsKey(field) && data[field] != null && data[field].toString().isNotEmpty) {
-              imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkCollection}/${product.id}/${data[field]}';
+              imageUrl = '${PocketBaseConfig.pocketBaseUrl}/api/files/${PocketBaseConfig.produkMarketplaceCollection}/${product.id}/${data[field]}';
               break;
             }
           }

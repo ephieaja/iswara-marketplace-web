@@ -7,6 +7,106 @@ import '../../config/pocketbase_config.dart';
 import '../../services/pocketbase_service.dart';
 import 'edit_product_screen.dart';
 
+/// Helper untuk mendapatkan URL lengkap gambar dari PocketBase (single image).
+///
+/// PERUBAHAN 14 Agt 2026 (Fase 1):
+/// - Tambah parameter `collectionName` untuk support Produk + ProdukMarketplace.
+/// - Default ke `produkMarketplaceCollection` (Fase 1 default untuk marketplace).
+String _getProductImageUrl(dynamic imageField, String recordId, {String? collectionName}) {
+  if (imageField == null || imageField.toString().isEmpty) {
+    return '';
+  }
+
+  final value = imageField.toString();
+
+  if (value.isEmpty) {
+    return '';
+  }
+
+  // Jika sudah URL lengkap dan valid
+  if (value.startsWith('http') &&
+      !value.contains('vercel.app') &&
+      !value.contains('localhost')) {
+    return value;
+  }
+
+  // Ambil nama file saja dari path
+  String filename;
+  if (value.contains('/')) {
+    filename = value.split('/').last;
+  } else {
+    filename = value;
+  }
+
+  // Collection name PocketBase
+  final coll = collectionName ?? PocketBaseConfig.produkMarketplaceCollection;
+  return '${PocketBaseConfig.pocketBaseUrl}/api/files/$coll/$recordId/$filename';
+}
+
+/// Helper untuk mendapatkan URL gambar dari list (multiple images)
+List<String> _getProductImageUrls(dynamic imageField, String recordId, {String? collectionName}) {
+  final urls = <String>[];
+
+  if (imageField == null) {
+    return urls;
+  }
+
+  // Handle List
+  if (imageField is List) {
+    for (var item in imageField) {
+      if (item != null && item.toString().isNotEmpty) {
+        final url = _getProductImageUrl(item, recordId, collectionName: collectionName);
+        if (url.isNotEmpty) urls.add(url);
+      }
+    }
+  }
+  // Handle single value
+  else if (imageField.toString().isNotEmpty) {
+    final url = _getProductImageUrl(imageField, recordId, collectionName: collectionName);
+    if (url.isNotEmpty) urls.add(url);
+  }
+
+  return urls;
+}
+
+/// Helper untuk mendapatkan URL gambar dari field terpisah (gambar1, gambar2, gambar3)
+List<String> _getProductImageUrlsFromFields(Map<String, dynamic> data, String recordId, {String? collectionName}) {
+  final urls = <String>[];
+
+  // Cek field 'gambar' sebagai array
+  if (data.containsKey('gambar')) {
+    final gambar = data['gambar'];
+    if (gambar is List) {
+      for (var item in gambar) {
+        if (item != null && item.toString().isNotEmpty) {
+          final url = _getProductImageUrl(item, recordId, collectionName: collectionName);
+          if (url.isNotEmpty && !urls.contains(url)) {
+            urls.add(url);
+          }
+        }
+      }
+    } else if (gambar != null && gambar.toString().isNotEmpty) {
+      final url = _getProductImageUrl(gambar, recordId, collectionName: collectionName);
+      if (url.isNotEmpty && !urls.contains(url)) {
+        urls.add(url);
+      }
+    }
+  }
+
+  // Cek field terpisah
+  final fieldNames = ['gambar1', 'gambar2', 'gambar3'];
+  for (final field in fieldNames) {
+    if (data.containsKey(field) && data[field] != null && data[field].toString().isNotEmpty) {
+      final url = _getProductImageUrl(data[field], recordId, collectionName: collectionName);
+      if (url.isNotEmpty && !urls.contains(url)) {
+        urls.add(url);
+      }
+    }
+  }
+
+  return urls;
+}
+
 class MyProductsScreen extends StatefulWidget {
   final String userId;
 
@@ -28,7 +128,10 @@ class _MyProductsScreenState extends State<MyProductsScreen> {
   Future<void> _loadUserData() async {
     try {
       final pb = PocketBaseService.instance;
-      final doc = await pb.collection(PocketBaseConfig.usersCollection).getOne(widget.userId);
+      // Fase 1: marketplace pakai `users_auth` collection (bukan `users` legacy)
+      final doc = await pb
+          .collection(PocketBaseConfig.usersAuthCollection)
+          .getOne(widget.userId);
 
       setState(() {
         _userData = doc.data;
@@ -41,11 +144,36 @@ class _MyProductsScreenState extends State<MyProductsScreen> {
   Future<List<RecordModel>> _getMyProducts() async {
     try {
       final pb = PocketBaseService.instance;
-      final result = await pb.collection(PocketBaseConfig.produkCollection).getList(
-        filter: 'sellerId = "${widget.userId}"',
-        sort: '-created',
-        perPage: 200,
-      );
+
+      // Fase 1: lookup SellersMarketplace record dulu (untuk filter by `seller` relation)
+      String? sellerId;
+      try {
+        final sellerResult = await pb
+            .collection(PocketBaseConfig.sellersMarketplaceCollection)
+            .getList(
+              filter: 'user = "${widget.userId}"',
+              perPage: 1,
+            );
+        if (sellerResult.items.isNotEmpty) {
+          sellerId = sellerResult.items.first.id;
+        }
+      } catch (e) {
+        debugPrint('Error fetching SellersMarketplace: $e');
+      }
+
+      if (sellerId == null) {
+        // Belum jadi seller
+        return [];
+      }
+
+      // Query ProdukMarketplace dengan filter seller = sellersMarketplace_id
+      final result = await pb
+          .collection(PocketBaseConfig.produkMarketplaceCollection)
+          .getList(
+            filter: 'seller = "$sellerId"',
+            sort: '-created',
+            perPage: 200,
+          );
       return result.items;
     } catch (e) {
       return [];
@@ -222,9 +350,20 @@ class _MyProductsScreenState extends State<MyProductsScreen> {
           productId: product.id,
           productData: product.data,
           userId: widget.userId,
-          namaToko: _userData!['NamaToko']?.toString() ?? '',
-          daerah: _userData!['Daerah']?.toString() ?? '',
-          noWa: _userData!['NoWa']?.toString() ?? '',
+          // Fase 1: `_userData` berasal dari `users_auth` collection.
+          // Field names:
+          // - `users_auth.phone` (bukan `nowa`)
+          // - `users_auth.daerah` (sama)
+          // - `namatoko` TIDAK ada di users_auth — ambil dari SellersMarketplace.
+          //    Untuk sekarang fallback ke `name` user. EditProductScreen akan
+          //    cari SellersMarketplace.id via filter `user = userId`.
+          namaToko: _userData!['namatoko']?.toString() ??
+              _userData!['name']?.toString() ??
+              '',
+          daerah: _userData!['daerah']?.toString() ?? '',
+          noWa: _userData!['phone']?.toString() ??
+              _userData!['nowa']?.toString() ??
+              '',
         ),
       ),
     );
@@ -249,12 +388,34 @@ class _MyProductsScreenState extends State<MyProductsScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('BATAL'),
           ),
-          ElevatedButton(
+                    ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
                 final pb = PocketBaseService.instance;
-                await pb.collection(PocketBaseConfig.produkCollection).delete(product.id);
+                // Fase 1: juga hapus varian record terkait di produk_varian_marketplace
+                try {
+                  final varianResult = await pb
+                      .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                      .getList(
+                        filter: 'produk = "${product.id}"',
+                        perPage: 50,
+                      );
+                  for (final v in varianResult.items) {
+                    try {
+                      await pb
+                          .collection(PocketBaseConfig.produkVarianMarketplaceCollection)
+                          .delete(v.id);
+                    } catch (e) {
+                      debugPrint('Error delete varian ${v.id}: $e');
+                    }
+                  }
+                } catch (e) {
+                  debugPrint('Error fetching varian for delete: $e');
+                }
+                await pb
+                    .collection(PocketBaseConfig.produkMarketplaceCollection)
+                    .delete(product.id);
 
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -302,7 +463,13 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = product.data;
     final harga = (data['harga'] as num?)?.toInt() ?? 0;
-    final gambarUrl = data['gambar']?.toString();
+    // Cek berbagai kemungkinan nama field gambar
+    // Fase 1: ProdukMarketplace URL path (default untuk marketplace)
+    final imageUrls = _getProductImageUrlsFromFields(
+      data,
+      product.id,
+      collectionName: PocketBaseConfig.produkMarketplaceCollection,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -320,17 +487,10 @@ class _ProductCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Image
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(16),
-            ),
-            child: Container(
-              height: 180,
-              width: double.infinity,
-              color: AppTheme.backgroundColor,
-              child: _buildProductImage(gambarUrl),
-            ),
+          // Image Carousel
+          _ProductImageCarousel(
+            imageUrls: imageUrls,
+            productId: product.id,
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -400,7 +560,7 @@ class _ProductCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      data['Daerah'] ?? '',
+                      data['daerah'] ?? '',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[500],
@@ -440,42 +600,113 @@ class _ProductCard extends StatelessWidget {
     }
     return number.toString();
   }
+}
 
-  /// Helper untuk menampilkan gambar produk
-  Widget _buildProductImage(dynamic fotoUrl) {
-    final url = fotoUrl?.toString();
+/// Carousel widget untuk menampilkan multiple foto produk
+class _ProductImageCarousel extends StatefulWidget {
+  final List<String> imageUrls;
+  final String productId;
 
-    if (url != null && url.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: url,
-        height: 180,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          height: 180,
-          color: AppTheme.backgroundColor,
-          child: const Center(
-            child: CircularProgressIndicator(),
+  const _ProductImageCarousel({
+    required this.imageUrls,
+    required this.productId,
+  });
+
+  @override
+  State<_ProductImageCarousel> createState() => _ProductImageCarouselState();
+}
+
+class _ProductImageCarouselState extends State<_ProductImageCarousel> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.imageUrls.isEmpty) {
+      return _buildNoImagePlaceholder();
+    }
+
+    return Column(
+      children: [
+        // Image Carousel
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: Container(
+            height: 180,
+            width: double.infinity,
+            color: AppTheme.backgroundColor,
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() => _currentPage = index);
+              },
+              itemCount: widget.imageUrls.length,
+              itemBuilder: (context, index) {
+                return CachedNetworkImage(
+                  imageUrl: widget.imageUrls[index],
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.contain, // Changed from cover to prevent cropping
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                  errorWidget: (context, url, error) => _buildNoImagePlaceholder(),
+                );
+              },
+            ),
           ),
         ),
-        errorWidget: (context, url, error) => _buildNoImagePlaceholder(),
-      );
-    }
-    return _buildNoImagePlaceholder();
+        // Page Indicators
+        if (widget.imageUrls.length > 1)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.imageUrls.length,
+                (index) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentPage == index ? 20 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _currentPage == index
+                        ? AppTheme.primaryColor
+                        : Colors.grey[300],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildNoImagePlaceholder() {
-    return Container(
-      height: 180,
-      color: AppTheme.backgroundColor,
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.image, size: 48, color: AppTheme.textLight),
-            SizedBox(height: 8),
-            Text('Tidak ada gambar', style: TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      child: Container(
+        height: 180,
+        width: double.infinity,
+        color: AppTheme.backgroundColor,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.image, size: 48, color: AppTheme.textLight),
+              SizedBox(height: 8),
+              Text(
+                'Tidak ada gambar',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
         ),
       ),
     );

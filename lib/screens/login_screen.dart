@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 
 import '../../config/theme.dart';
+import '../../config/pocketbase_config.dart';
 import '../../services/pocketbase_service.dart';
 import 'dashboard_screen.dart';
 
@@ -35,8 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final pb = PocketBaseService.instance;
 
-      // Login dengan PocketBase
-      final authData = await pb.collection('users').authWithPassword(
+      // Fase 1: Login pakai `users_auth` collection (bukan `users` legacy).
+      final authData = await pb
+          .collection(PocketBaseConfig.usersAuthCollection)
+          .authWithPassword(
         _emailController.text.trim(),
         _passwordController.text,
       );
@@ -46,21 +49,62 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
+      // Cek apakah user ini juga seller (SellersMarketplace)
+      String namaToko = '';
+      String daerah = '';
+      String sellerStatus = 'approved';
+      String? instagram;
+      String? facebook;
+      String? tiktok;
+      String? website;
+      try {
+        final sellerResult = await pb
+            .collection(PocketBaseConfig.sellersMarketplaceCollection)
+            .getList(
+              filter: 'user = "${user.id}"',
+              perPage: 1,
+            );
+        if (sellerResult.items.isNotEmpty) {
+          final sellerData = sellerResult.items.first.data;
+          namaToko = sellerData['namatoko']?.toString() ?? '';
+          daerah = sellerData['daerah_toko']?.toString() ??
+              sellerData['daerah']?.toString() ??
+              '';
+          sellerStatus = sellerData['status_verifikasi']?.toString() ?? 'pending';
+          instagram = sellerData['instagram']?.toString();
+          facebook = sellerData['facebook']?.toString();
+          tiktok = sellerData['tiktok']?.toString();
+          website = sellerData['website']?.toString();
+        }
+      } catch (e) {
+        debugPrint('Error fetch SellersMarketplace: $e');
+      }
+
       // Ambil data user dari record
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => DashboardScreen(
-            username: userData['name']?.toString() ?? userData['email']?.toString().split('@').first ?? 'User',
-            namaToko: userData['NamaToko']?.toString() ?? '',
-            daerah: userData['Daerah']?.toString() ?? '',
-            noWa: userData['NoWa']?.toString() ?? '',
+            username: userData['name']?.toString() ??
+                userData['email']?.toString().split('@').first ??
+                'User',
+            namaToko: namaToko,
+            daerah: daerah,
+            // Fase 1: users_auth pakai `phone` (bukan `nowa` di legacy)
+            noWa: userData['phone']?.toString() ??
+                userData['nowa']?.toString() ??
+                '',
             userId: user.id,
-            noAnggota: userData['NoAnggota']?.toString() ?? '',
+            noAnggota: '', // No konsep noanggota di users_auth marketplace
             namaLengkap: userData['name']?.toString() ?? '',
-            jabatan: userData['jabatan']?.toString() ?? '',
-            sebagai: userData['sebagai']?.toString(),
-            alamat: userData['Alamat']?.toString() ?? '',
+            jabatan: '',
+            sebagai: null,
+            alamat: userData['alamat']?.toString() ?? '',
+            sellerStatus: sellerStatus,
+            instagram: instagram,
+            facebook: facebook,
+            tiktok: tiktok,
+            website: website,
           ),
         ),
         (route) => false,
@@ -72,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
       String errorMessage;
       final response = e.response;
 
-      if (response != null && response['message'] != null) {
+      if (response != null && response.containsKey('message')) {
         errorMessage = response['message'].toString();
       } else if (e.statusCode == 400) {
         errorMessage = 'Email atau password salah';

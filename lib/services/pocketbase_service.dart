@@ -13,17 +13,37 @@ class PocketBaseService {
 
   static PocketBase get pb => instance;
 
-  // Collection references — sesuai PB digabung dengan iswara_app.
-  static RecordService get users => instance.collection(PocketBaseConfig.usersCollection);
-  static RecordService get produk => instance.collection(PocketBaseConfig.produkCollection);
-  static RecordService get produkVarian => instance.collection(PocketBaseConfig.produkVarianCollection);
-  static RecordService get kategori => instance.collection(PocketBaseConfig.kategoriCollection);
-  static RecordService get pesanan => instance.collection(PocketBaseConfig.pesananCollection);
+  // ============================================
+  // Collection references — MARKETPLACE (non-anggota)
+  // ============================================
+  static RecordService get usersAuth =>
+      instance.collection(PocketBaseConfig.usersAuthCollection);
+  static RecordService get sellersMarketplace =>
+      instance.collection(PocketBaseConfig.sellersMarketplaceCollection);
+  static RecordService get produkMarketplace =>
+      instance.collection(PocketBaseConfig.produkMarketplaceCollection);
+  static RecordService get produkVarianMarketplace => instance
+      .collection(PocketBaseConfig.produkVarianMarketplaceCollection);
+  static RecordService get pesananMarketplace =>
+      instance.collection(PocketBaseConfig.pesananMarketplaceCollection);
 
-  // Legacy getters (Fase 0 — akan direfactor di Fase 3 saat katalog/visitor dihapus).
-  static RecordService get interaksi => instance.collection(PocketBaseConfig.interaksiCollection);
-  static RecordService get penjual => instance.collection(PocketBaseConfig.penjualCollection);
-  static RecordService get visitors => instance.collection(PocketBaseConfig.visitorsCollection);
-  static RecordService get pemilikUsaha => instance.collection(PocketBaseConfig.pemilikUsahaCollection);
-  static RecordService get productViews => instance.collection(PocketBaseConfig.productViewsCollection);
+  // ============================================
+  // Collection references — SHARED
+  // ============================================
+  static RecordService get kategori =>
+      instance.collection(PocketBaseConfig.kategoriCollection);
+
+  // ============================================
+  // Legacy getters (Fase 3 — akan direfactor)
+  // ============================================
+  static RecordService get interaksi =>
+      instance.collection(PocketBaseConfig.interaksiCollection);
+  static RecordService get penjual =>
+      instance.collection(PocketBaseConfig.penjualCollection);
+  static RecordService get visitors =>
+      instance.collection(PocketBaseConfig.visitorsCollection);
+  static RecordService get pemilikUsaha =>
+      instance.collection(PocketBaseConfig.pemilikUsahaCollection);
+  static RecordService get productViews =>
+      instance.collection(PocketBaseConfig.productViewsCollection);
 }

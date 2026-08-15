@@ -56,7 +56,8 @@ class AuthProvider with ChangeNotifier {
   Future<bool> register({
     required String email,
     required String password,
-    String? name,
+    required String name,
+    required String phone,
     Map<String, dynamic>? additionalData,
   }) async {
     _isLoading = true;
@@ -67,6 +68,7 @@ class AuthProvider with ChangeNotifier {
       email: email,
       password: password,
       name: name,
+      phone: phone,
       additionalData: additionalData,
     );
 
